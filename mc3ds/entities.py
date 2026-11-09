@@ -342,8 +342,8 @@ def convert_entity(
         for key in ("TileX", "TileY", "TileZ", "Facing", "Direction"):
             if key in entity:
                 result[key] = int(entity[key]) if key != "Facing" else int(entity[key])
-        if "facing" in entity:
-            result["Direction"] = int(entity["facing"])
+        if "Facing" in entity:
+            result["Direction"] = int(entity["Facing"])
 
     # Minecart with chest / hopper — Items
     if (type_id & 0xFF) in (0x62, 0x60) and item_mapper is not None:
