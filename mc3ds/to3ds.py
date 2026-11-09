@@ -789,8 +789,6 @@ def insert_region_directory(
             converted = convert_entity(entity, entity_mapper, item_mapper, y_shift=region.y_shift)
             if not converted:
                 continue
-            if not converted:
-                continue
             pos = converted.get("Pos")
             if not isinstance(pos, list) or len(pos) < 3:
                 continue
