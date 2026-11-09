@@ -180,7 +180,7 @@ def _items_list(entity: dict, mapper: ItemMapper) -> list[dict]:
     return out
 
 
-def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMapper) -> dict | None:
+def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMapper, facing: str) -> dict | None:
     """
     Full conversion including nested Items. Returns None if the type is unknown
     or must not be written (e.g. idle piston).
@@ -217,7 +217,7 @@ def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMappe
             if converted:
                 result["Item"] = converted
         if "ItemRotation" in entity:
-            result["ItemRotation"] = int(entity["ItemRotation"])
+            result["ItemRotation"] = int(entity["ItemRotation"]) & 0xFF
         if "ItemDropChance" in entity:
             result["ItemDropChance"] = float(entity["ItemDropChance"])
         return result
@@ -289,6 +289,16 @@ def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMappe
             result["auto"] = int(bool(entity.get("auto", False)))
             result["powered"] = int(bool(entity.get("powered", False)))
 
+    if be_id == "ShulkerBox":
+        if str(facing) != "None":
+            facing_map = {"down": 0,"up": 1,"south": 2,"north": 3,"east": 4,"west": 5}
+            result["facing"] = int(facing_map.get(str(facing))) & 0xFF
+
+    if be_id == "Bed":
+        if "color" in entity:
+            result["color"] = int(getattr(entity["color"], "value", entity["color"])) & 0xFF
+        return result
+
     if be_id == "MobSpawner":
         spawn = entity.get("SpawnData") or {}
         if isinstance(spawn, dict):
@@ -306,10 +316,10 @@ def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMappe
             result["SpawnCount"] = int(entity["SpawnCount"])
 
     if be_id == "Skull":
-        if "SkullType" in entity:
-            result["SkullType"] = int(entity["SkullType"])
         if "Rot" in entity:
             result["Rot"] = int(entity["Rot"])
+        if str(facing) != "None":
+            result["SkullType"] = int(facing) & 0xFF
 
     if be_id == "FlowerPot":
         if "Item" in entity:
@@ -321,6 +331,10 @@ def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMappe
             elif isinstance(pot_item, (int, float)):
                 result["item"] = int(pot_item)
                 result["mData"] = int(entity.get("Data", 0))
+        elif str(facing) != "None":
+            item, meta = str(facing).split(":", 1)
+            result["item"] =  int(item)
+            result["mData"] = int(meta)
 
     if be_id == "Beacon":
         for key in ("Levels", "Primary", "Secondary"):
@@ -419,7 +433,6 @@ BLOCK_ID_TO_BE: dict[int, str] = {
     176: "Banner",
     177: "Banner",
     178: "DaylightDetector",  # inverted
+    218: "ShulkerBox",
     255: "StructureBlock",
 }
-for _shulker_id in range(219, 235):
-    BLOCK_ID_TO_BE[_shulker_id] = "ShulkerBox"

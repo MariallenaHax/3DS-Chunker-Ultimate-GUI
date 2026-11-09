@@ -131,7 +131,7 @@ def block_index(x: int, y: int, z: int) -> int:
 # -------------------------
 # Terrain section
 # -------------------------
-def build_terrain_section(subchunks: list[tuple[bytes, bytes]]) -> tuple[bytes, int]:
+def build_terrain_section(subchunks: list[tuple[bytes, bytes]],biomes: list[tuple[bytes, bytes]]) -> tuple[bytes, int]:
     """
     Builds the compressed terrain section from ``(block ids, data nibbles)``
     pairs. Light, the heightmap and biomes are written as zeroes, exactly like
@@ -148,7 +148,10 @@ def build_terrain_section(subchunks: list[tuple[bytes, bytes]]) -> tuple[bytes, 
         raw += zero_nibbles  # sky light
         raw += zero_nibbles  # block light
     raw += bytes(HEIGHTMAP_SIZE)
-    raw += bytes(BIOMES_SIZE)
+    if biomes is None:
+        biomes = bytes(BIOMES_SIZE)
+    assert len(biomes) == BIOMES_SIZE
+    raw += biomes
     return zlib.compress(bytes(raw)), len(raw)
 
 
@@ -185,6 +188,8 @@ def build_chunk_blob(
     page_magic: int,
     entities_compressed: bytes | None = None,
     entities_raw_size: int = 0,
+    ticks_compressed: bytes | None = None,
+    ticks_raw_size: int = 0,
 ) -> bytes:
     offset = CHUNK_HEADER_SIZE
     fixed = struct.pack(
@@ -218,6 +223,11 @@ def build_chunk_blob(
         offset += len(entities_compressed)
     else:
         sections.append(EMPTY_SECTION)
+    if ticks_compressed:
+        sections.append((SECTION_TICKS, offset, len(ticks_compressed), ticks_raw_size))
+        offset += len(ticks_compressed)
+    else:
+        sections.append(EMPTY_SECTION)
     while len(sections) < SECTION_COUNT:
         sections.append(EMPTY_SECTION)
 
@@ -231,8 +241,13 @@ def build_chunk_blob(
         out.write(block_entities_compressed)
     if entities_compressed:
         out.write(entities_compressed)
+    if ticks_compressed:
+        out.write(ticks_compressed)
     return out.getvalue()
 
+def write_tick_section(ticks: list[dict]) -> bytes:
+    """Serialize the MC3DS tick section as a little-endian NBT tickList root."""
+    return write_root_compound({"tickList": list(ticks)}) if ticks else b""
 
 # -------------------------
 # Little endian NBT writer (block entities)
@@ -274,23 +289,19 @@ _FORCE_INT = frozenset(
         "Primary",
         "Secondary",
         "Base",
-        "facing",
-        "Facing",
+        "mData",
     }
 )
 _FORCE_SHORT = frozenset(
     {
         "Damage",
+        "item",
         "HurtTime",
         "Fire",
         "Air",
         "BurnTime",
         "CookTime",
         "BrewTime",
-        "ItemRotation",
-        "Rot",
-        "SkullType",
-        "mData",
     }
 )
 _FORCE_BYTE = frozenset(
@@ -302,10 +313,14 @@ _FORCE_BYTE = frozenset(
         "NewState",
         "Sticky",
         "TrackOutput",
+        "ItemRotation",
         "auto",
         "powered",
         "Findable",
         "note",
+        "SkullType",
+        "facing",
+        "Rot",
     }
 )
 _FORCE_FLOAT = frozenset(

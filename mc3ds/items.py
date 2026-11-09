@@ -72,6 +72,7 @@ _FALLBACK_ITEMS = {
     "minecraft:soul_sand": 88,
     "minecraft:glowstone": 89,
     "minecraft:jack_o_lantern": 91,
+    "minecraft:barrier": 95,
     "minecraft:oak_trapdoor": 96,
     "minecraft:stone_bricks": 98,
     "minecraft:iron_bars": 101,
@@ -91,6 +92,8 @@ _FALLBACK_ITEMS = {
     "minecraft:end_stone": 121,
     "minecraft:dragon_egg": 122,
     "minecraft:redstone_lamp": 123,
+    "minecraft:dropper": 125,
+    "minecraft:activator_rail": 126,
     "minecraft:oak_slab": 158,  # may vary — prefer blocks.json
     "minecraft:emerald_block": 133,
     "minecraft:beacon": 138,
@@ -102,7 +105,14 @@ _FALLBACK_ITEMS = {
     "minecraft:redstone_block": 152,
     "minecraft:hopper": 154,
     "minecraft:quartz_block": 155,
-    "minecraft:dropper": 158,
+    "minecraft:stained_glass": 160,
+    "minecraft:repeating_command_block": 188,
+    "minecraft:chain_command_block": 189,
+    "minecraft:grass_path": 198,
+    "minecraft:end_rod": 208,
+    "minecraft:concrete": 236,
+    "minecraft:concrete_powder": 237,
+    "minecraft:structure_block": 252,
     "minecraft:iron_shovel": 256,
     "minecraft:iron_pickaxe": 257,
     "minecraft:iron_axe": 258,
@@ -132,9 +142,11 @@ _FALLBACK_ITEMS = {
     "minecraft:bowl": 281,
     "minecraft:mushroom_stew": 282,
     "minecraft:golden_sword": 283,
+    "minecraft:golden_axe": 286,
     "minecraft:string": 287,
     "minecraft:feather": 288,
     "minecraft:gunpowder": 289,
+    "minecraft:iron_hoe": 292,
     "minecraft:wheat_seeds": 295,
     "minecraft:wheat": 296,
     "minecraft:bread": 297,
@@ -143,6 +155,9 @@ _FALLBACK_ITEMS = {
     "minecraft:leather_leggings": 300,
     "minecraft:leather_boots": 301,
     "minecraft:chainmail_helmet": 302,
+    "minecraft:chainmail_chestplate": 303,
+    "minecraft:chainmail_leggings": 304,
+    "minecraft:chainmail_boots": 305,
     "minecraft:iron_helmet": 306,
     "minecraft:iron_chestplate": 307,
     "minecraft:iron_leggings": 308,
@@ -151,6 +166,10 @@ _FALLBACK_ITEMS = {
     "minecraft:diamond_chestplate": 311,
     "minecraft:diamond_leggings": 312,
     "minecraft:diamond_boots": 313,
+    "minecraft:golden_helmet": 314,
+    "minecraft:golden_chestplate": 315,
+    "minecraft:golden_leggings": 316,
+    "minecraft:golden_boots": 317,
     "minecraft:flint": 318,
     "minecraft:porkchop": 319,
     "minecraft:cooked_porkchop": 320,
@@ -274,46 +293,152 @@ _FALLBACK_ITEMS = {
     "minecraft:lingering_potion": 441,
     "minecraft:shield": 442,
     "minecraft:elytra": 443,
-    "minecraft:spruce_boat": 444,
-    "minecraft:birch_boat": 445,
-    "minecraft:jungle_boat": 446,
-    "minecraft:acacia_boat": 447,
-    "minecraft:dark_oak_boat": 448,
     "minecraft:totem_of_undying": 450,
     "minecraft:shulker_shell": 445,  # may differ by build
     "minecraft:iron_nugget": 452,
+    "minecraft:enchanted_golden_apple": 466,
 }
 
+POTION_DAMAGE = {
+    "minecraft:water": 0,
+    "minecraft:mundane": 1,
+    "minecraft:long_mundane": 2,
+    "minecraft:thick": 3,
+    "minecraft:awkward": 4,
+    "minecraft:night_vision": 5,
+    "minecraft:long_night_vision": 6,
+    "minecraft:invisibility": 7,
+    "minecraft:long_invisibility": 8,
+    "minecraft:leaping": 9,
+    "minecraft:long_leaping": 10,
+    "minecraft:strong_leaping": 11,
+    "minecraft:fire_resistance": 12,
+    "minecraft:long_fire_resistance": 13,
+    "minecraft:swiftness": 14,
+    "minecraft:long_swiftness": 15,
+    "minecraft:strong_swiftness": 16,
+    "minecraft:slowness": 17,
+    "minecraft:long_slowness": 18,
+    "minecraft:water_breathing": 19,
+    "minecraft:long_water_breathing": 20,
+    "minecraft:healing": 21,
+    "minecraft:strong_healing": 22,
+    "minecraft:harming": 23,
+    "minecraft:strong_harming": 24,
+    "minecraft:poison": 25,
+    "minecraft:long_poison": 26,
+    "minecraft:strong_poison": 27,
+    "minecraft:regeneration": 28,
+    "minecraft:long_regeneration": 29,
+    "minecraft:strong_regeneration": 30,
+    "minecraft:strength": 31,
+    "minecraft:long_strength": 32,
+    "minecraft:strong_strength": 33,
+    "minecraft:weakness": 34,
+    "minecraft:long_weakness": 35,
+    "water": 0,
+    "mundane": 1,
+    "long_mundane": 2,
+    "thick": 3,
+    "awkward": 4,
+    "night_vision": 5,
+    "long_night_vision": 6,
+    "invisibility": 7,
+    "long_invisibility": 8,
+    "leaping": 9,
+    "long_leaping": 10,
+    "strong_leaping": 11,
+    "fire_resistance": 12,
+    "long_fire_resistance": 13,
+    "swiftness": 14,
+    "long_swiftness": 15,
+    "strong_swiftness": 16,
+    "slowness": 17,
+    "long_slowness": 18,
+    "water_breathing": 19,
+    "long_water_breathing": 20,
+    "healing": 21,
+    "strong_healing": 22,
+    "harming": 23,
+    "strong_harming": 24,
+    "poison": 25,
+    "long_poison": 26,
+    "strong_poison": 27,
+    "regeneration": 28,
+    "long_regeneration": 29,
+    "strong_regeneration": 30,
+    "strength": 31,
+    "long_strength": 32,
+    "strong_strength": 33,
+    "weakness": 34,
+    "long_weakness": 35
+}
+
+def _nbt_value(value):
+    return value.value if hasattr(value, "value") else value
+
+
+def get_potion_type(stack: dict) -> str | None:
+    tag = stack.get("tag") or {}
+    potion = tag.get("Potion")
+
+    if potion is not None:
+        return str(_nbt_value(potion))
+
+    components = stack.get("components") or {}
+    contents = components.get("minecraft:potion_contents")
+
+    if contents is not None:
+        potion = contents.get("potion")
+        if potion is not None:
+            return str(_nbt_value(potion))
 
 class ItemMapper:
-    def __init__(self, blocks_json: Path | None = None) -> None:
+    def __init__(self,blocks_json: Path | None = None,items_json: Path | None = None,) -> None:
         self._name_to_id: dict[str, tuple[int, int]] = {}
-        # Seed from fallback
+
         for name, val in _FALLBACK_ITEMS.items():
             if isinstance(val, tuple):
-                self._name_to_id[name] = (val[0], val[1])
+                self._name_to_id[name] = (int(val[0]), int(val[1]))
             else:
                 self._name_to_id[name] = (int(val), 0)
-        # Overlay blocks.json (Java legacy numeric ids — good for 0-198ish)
-        path = blocks_json or (DATA / "blocks.json")
+
+        path = items_json or (DATA / "items.json")
+
         if path.is_file():
-            raw = json.loads(path.read_text(encoding="utf-8")).get("blocks", {})
-            for key, value in raw.items():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            items = raw.get("items", raw)
+
+            for key, name in items.items():
+                try:
+                    item_id, meta = map(int, key.split(":"))
+                except (ValueError, AttributeError):
+                    continue
+
+                self._name_to_id[str(name)] = (item_id, meta)
+
+        path = blocks_json or (DATA / "blocks.json")
+
+        if path.is_file():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            blocks = raw.get("blocks", {})
+
+            for key, value in blocks.items():
                 try:
                     bid, meta = map(int, key.split(":"))
-                except ValueError:
+                except (ValueError, AttributeError):
                     continue
-                name = value.split("[", 1)[0]
-                # only set if missing — keep PE item overrides
+
+                name = str(value).split("[", 1)[0]
+
                 self._name_to_id.setdefault(name, (bid, meta))
-                # also meta 0 as default for bare name
-                if meta == 0:
-                    self._name_to_id[name] = (bid, 0)
+
         extras = DATA / "items_extra.json"
+
         if extras.is_file():
             for name, val in json.loads(extras.read_text(encoding="utf-8")).items():
                 if isinstance(val, list):
-                    self._name_to_id[name] = (int(val[0]), int(val[1]))
+                    self._name_to_id[name] = (int(val[0]),int(val[1]))
                 else:
                     self._name_to_id[name] = (int(val), 0)
 
@@ -332,28 +457,6 @@ class ItemMapper:
         if bare in self._name_to_id:
             bid, meta = self._name_to_id[bare]
             return bid, java_damage if java_damage else meta
-        # common renames
-        aliases = {
-            "minecraft:grass": "minecraft:grass_block",
-            "minecraft:sign": "minecraft:oak_sign",
-            "minecraft:wall_sign": "minecraft:oak_sign",
-            "minecraft:wooden_door": "minecraft:oak_door",
-            "minecraft:fence": "minecraft:oak_fence",
-            "minecraft:fence_gate": "minecraft:oak_fence_gate",
-            "minecraft:planks": "minecraft:oak_planks",
-            "minecraft:log": "minecraft:oak_log",
-            "minecraft:leaves": "minecraft:oak_leaves",
-            "minecraft:sapling": "minecraft:oak_sapling",
-            "minecraft:waterlily": "minecraft:lily_pad",
-            "minecraft:reeds": "minecraft:sugar_cane",
-            "minecraft:noteblock": "minecraft:note_block",
-            "minecraft:web": "minecraft:cobweb",
-            "minecraft:deadbush": "minecraft:dead_bush",
-            "minecraft:tallgrass": "minecraft:short_grass",
-        }
-        if name in aliases and aliases[name] in self._name_to_id:
-            bid, meta = self._name_to_id[aliases[name]]
-            return bid, java_damage if java_damage else meta
         self.unmapped[name] = self.unmapped.get(name, 0) + 1
         return 0, 0
 
@@ -370,7 +473,17 @@ class ItemMapper:
         if isinstance(name, int):
             item_id, meta = int(name), damage
         else:
-            item_id, meta = self.lookup(str(name), damage)
+            name = str(name)
+            item_id, meta = self.lookup(name, damage)
+
+            if name in ("minecraft:potion","minecraft:splash_potion","minecraft:lingering_potion","minecraft:tipped_arrow",):
+                potion_type = get_potion_type(stack)
+
+                if potion_type is not None:
+                    meta = POTION_DAMAGE.get(potion_type, 0)
+                    if name == "minecraft:tipped_arrow":
+                        meta += 1
+        
         if item_id == 0 and str(name) not in ("minecraft:air", "air", "0"):
             # keep a placeholder stone so the slot isn't silently empty? prefer skip
             return None

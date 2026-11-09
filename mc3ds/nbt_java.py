@@ -7,6 +7,7 @@ The stock ``nbt`` library exposes TAG_Compound with both ``.keys()`` and a
 ``as_dict`` return ``{}`` and wiped chest Items / sign TextN).
 """
 from __future__ import annotations
+import json
 
 from typing import Any
 
@@ -16,12 +17,27 @@ def nbt_to_python(value: Any) -> Any:
         return None
 
     # Already plain
-    if isinstance(value, (bool, int, float, str, bytes, bytearray)):
+    if isinstance(value, (bool, int, float, bytes, bytearray)):
         return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                if "text" in parsed:
+                    return parsed["text"]
+                return {str(k): nbt_to_python(v) for k, v in parsed.items()}
+            if isinstance(parsed, list):
+                return [nbt_to_python(v) for v in parsed]
+        except (json.JSONDecodeError, TypeError):
+            pass
     if isinstance(value, dict):
         return {str(k): nbt_to_python(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [nbt_to_python(v) for v in value]
+
+    inner = getattr(value, "value", None)
+    if isinstance(inner, str):
+        return nbt_to_python(inner)
 
     # nbtlib typed scalars (String, Int, …) — prefer .unpack() / .value
     unpack = getattr(value, "unpack", None)

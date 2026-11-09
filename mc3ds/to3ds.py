@@ -74,6 +74,61 @@ _CRITICAL_PROPS = {
     "powered",  # observer / door / etc.
 }
 
+ITEM_FRAME_IDS = {
+    "minecraft:item_frame",
+    "minecraft:glow_item_frame",
+}
+
+ITEM_FRAME_FACING = {
+    5: 0,  # East
+    4: 1,  # West
+    3: 2,  # South
+    2: 3,  # North
+}
+
+POTTED_BLOCKS = {
+    "minecraft:potted_oak_sapling": "6:0",
+    "minecraft:potted_spruce_sapling": "6:1",
+    "minecraft:potted_birch_sapling": "6:2",
+    "minecraft:potted_jungle_sapling": "6:3",
+    "minecraft:potted_acacia_sapling": "6:4",
+    "minecraft:potted_dark_oak_sapling": "6:5",
+    "minecraft:potted_fern": "31:2",
+    "minecraft:potted_dead_bush": "32:0",
+    "minecraft:potted_dandelion": "37:0",
+    "minecraft:potted_poppy": "38:0",
+    "minecraft:potted_blue_orchid": "38:1",
+    "minecraft:potted_allium": "38:2",
+    "minecraft:potted_azure_bluet": "38:3",
+    "minecraft:potted_red_tulip": "38:4",
+    "minecraft:potted_orange_tulip": "38:5",
+    "minecraft:potted_white_tulip": "38:6",
+    "minecraft:potted_pink_tulip": "38:7",
+    "minecraft:potted_oxeye_daisy": "38:8",
+    "minecraft:potted_brown_mushroom": "39:0",
+    "minecraft:potted_red_mushroom": "40:0",
+    "minecraft:potted_cactus": "81:0",
+}
+
+
+def item_frame_metadata(entity: dict) -> int | None:
+    try:
+        facing = int(entity["Facing"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    direction = ITEM_FRAME_FACING.get(facing)
+    if direction is None:
+        return None
+
+    meta = direction
+
+    item = entity.get("Item") or entity.get("item")
+    if isinstance(item, dict):
+        if item.get("id") in ("minecraft:filled_map", "minecraft:map"):
+            meta |= 0x4
+
+    return meta
 
 class ConversionError(Exception):
     pass
@@ -460,6 +515,7 @@ class JavaRegion:
         self._chunks = defaultdict(list)
         self._block_entities = []
         self._entities = []
+        self._ticks = []
 
         reader = RegionReader(self.path)
         if reader.empty:
@@ -503,6 +559,16 @@ class JavaRegion:
                     entity = as_dict(entity)
                     self._entities.append(entity)
 
+                for tick in chunk.block_ticks:
+                    tick_data = as_dict(tick)
+                    if isinstance(tick_data, dict):
+                        self._ticks.append((tick_data, chunk.data_version, False))
+
+                for tick in chunk.fluid_ticks:
+                    tick_data = as_dict(tick)
+                    if isinstance(tick_data, dict):
+                        self._ticks.append((tick_data, chunk.data_version, True))
+
                 relative_x = chunk.x - base_chunk_x
                 relative_z = chunk.z - base_chunk_z
                 if not (0 <= relative_x < REGION_CHUNKS and 0 <= relative_z < REGION_CHUNKS):
@@ -523,11 +589,17 @@ class JavaRegion:
         self.height = cdb.WORLD_HEIGHT if lowest is not None else 1
         self.subchunk_count = (self.height + 15) // 16
 
-    def terrain(self, local_x: int, local_z: int) -> tuple[bytes, int]:
+    def terrain(self, local_x: int, local_z: int, item_frames: list | None = None) -> tuple[bytes, int]:
         height = self.subchunk_count * 16
         ids = np.zeros((16, 16, height), dtype=np.uint8)
         data = np.zeros((16, 16, height), dtype=np.uint8)
+        biomes = np.zeros((16, 16), dtype=np.uint8)
         for chunk in self._chunks.get((local_x, local_z), []):
+            if chunk.biomes is not None:
+                java_biomes = chunk.biomes
+                if java_biomes.size == 256:
+                    mapped = np.fromiter(java_biomes,dtype=np.uint8,count=256,)
+                    biomes = mapped.reshape(16, 16).transpose(0, 1)
             for subchunk in range(self.subchunk_count):
                 section_y = subchunk + self.lowest_section
                 if not (chunk.lowest_section <= section_y < chunk.lowest_section + cdb.MAX_SUBCHUNKS):
@@ -549,7 +621,10 @@ class JavaRegion:
                 y_slice = slice(subchunk * 16, subchunk * 16 + 16)
                 ids[:, :, y_slice][solid] = section_ids[solid]
                 data[:, :, y_slice][solid] = section_data[solid]
-
+                for x, y, z, meta in item_frames or []:
+                    if 0 <= x < 16 and 0 <= z < 16 and 0 <= y < height:
+                        ids[x, z, y] = 199
+                        data[x, z, y] = meta
         subchunks = []
         for subchunk in range(self.subchunk_count):
             y_slice = slice(subchunk * 16, subchunk * 16 + 16)
@@ -557,7 +632,7 @@ class JavaRegion:
             flat = data[:, :, y_slice].reshape(-1)
             nibbles = (flat[0::2] & 0xF) | ((flat[1::2] & 0xF) << 4)
             subchunks.append((blocks, nibbles.astype(np.uint8).tobytes()))
-        return cdb.build_terrain_section(subchunks)
+        return cdb.build_terrain_section(subchunks,biomes.tobytes())
 
     def block_entities(self, base_block_x: int, base_block_z: int) -> dict:
         "groups the region's block entities by the MC3DS chunk they end up in"
@@ -568,11 +643,57 @@ class JavaRegion:
             y2 = y + self.y_shift
             if not (0 <= y2 < cdb.WORLD_HEIGHT):
                 continue
-            converted = convert_block_entity(
-                entity, world_x, y2, world_z, self._item_mapper
-            )
+            facing = None
+            raw_id = str(entity.get("id", "")).lower()
+            if raw_id.endswith("shulker_box") or raw_id in ("minecraft:skull", "skull") or raw_id.endswith("_skull") or raw_id.endswith("_head"):
+                chunk_x = x // 16
+                chunk_z = z // 16
+                java_chunks = self._chunks.get((chunk_x, chunk_z), [])
+                for chunk in java_chunks:
+                    block = chunk.block_state_at(x % 16, y, z % 16, self._mapper.legacy)
+                    if block is None:
+                        continue
+                    properties = getattr(block, "properties", {})
+                    block_name = str(block.name())
+                    if raw_id.endswith("shulker_box"):
+                        facing = properties.get("facing")
+                        break
+                    if raw_id.endswith("_skull") or raw_id.endswith("_head") or raw_id in ("minecraft:skull", "skull"):
+                        skull_map = {"minecraft:skeleton_skull": 0,"minecraft:wither_skeleton_skull": 1,"minecraft:zombie_head": 2,"minecraft:player_head": 3,"minecraft:creeper_head": 4,"minecraft:dragon_head": 5}
+                        facing = skull_map.get(block_name)
+                        break
+            converted = convert_block_entity(entity,world_x,y2,world_z,self._item_mapper,facing)
             if converted:
                 grouped[(world_x // 16, world_z // 16)].append(converted)
+        for (local_x, local_z), java_chunks in self._chunks.items():
+            for chunk in java_chunks:
+                for section_y in range(chunk.lowest_section,chunk.lowest_section + cdb.MAX_SUBCHUNKS):
+                    try:
+                        section = chunk.blocks(section_y, self._mapper.legacy)
+                    except JavaChunkError:
+                        continue
+                    if section is None:
+                        continue
+                    palette, indices = section
+                    indices = np.asarray(indices).reshape(16, 16, 16)
+                    for palette_index, block in enumerate(palette):
+                        block_name = str(block.name())
+                        pot_item = POTTED_BLOCKS.get(block_name)
+                        if pot_item is None:
+                            continue
+                        positions = np.argwhere(indices == palette_index)
+                        for rel_y, rel_z, rel_x in positions:
+                            x = local_x * 16 + int(rel_x)
+                            z = local_z * 16 + int(rel_z)
+                            y = section_y * 16 + int(rel_y)
+                            y2 = y + self.y_shift
+                            if not (0 <= y2 < cdb.WORLD_HEIGHT):
+                                continue
+                            world_x = base_block_x + x
+                            world_z = base_block_z + z
+                            synthetic_entity = {"id": "FlowerPot"}
+                            converted = convert_block_entity(synthetic_entity,world_x,y2,world_z,self._item_mapper,facing=pot_item)
+                            if converted: grouped[(world_x // 16, world_z // 16)].append(converted)
         return grouped
 
 
@@ -639,11 +760,35 @@ def insert_region_directory(
         # used for terrain by shifting X/Z after conversion.
         ox = start_chunk_x * 16
         oz = start_chunk_z * 16
+        item_frames_by_chunk = defaultdict(list)
         entities_by_chunk = defaultdict(list)
         for entity in region._entities:
-            converted = convert_entity(
-                entity, entity_mapper, item_mapper, y_shift=region.y_shift
-            )
+            raw_id = str(
+                entity.get("id")
+                or entity.get("Id")
+                or entity.get("identifier")
+                or ""
+            ).lower()
+            if raw_id in ITEM_FRAME_IDS:
+                try:
+                    x = int(entity["TileX"]) + ox
+                    y = int(entity["TileY"]) + region.y_shift
+                    z = int(entity["TileZ"]) + oz
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if not (0 <= y < cdb.WORLD_HEIGHT):
+                    continue
+                facing_meta = item_frame_metadata(entity)
+                if facing_meta is None:
+                    continue
+                item_frames_by_chunk[(x // 16, z // 16)].append((x % 16, y, z % 16, facing_meta))
+                converted = convert_block_entity(entity, x, y, z, item_mapper,"None")
+                if converted:
+                    block_entities[(x // 16, z // 16)].append(converted)
+                continue
+            converted = convert_entity(entity, entity_mapper, item_mapper, y_shift=region.y_shift)
+            if not converted:
+                continue
             if not converted:
                 continue
             pos = converted.get("Pos")
@@ -658,6 +803,38 @@ def insert_region_directory(
             except Exception:
                 continue
             entities_by_chunk[(cx, cz)].append(converted)
+
+        ticks_by_chunk = defaultdict(list)
+
+
+        for tick, data_version, is_fluid in region._ticks:
+            try:
+                x = int(tick["x"]) + ox
+                y = int(tick["y"]) + region.y_shift
+                z = int(tick["z"]) + oz
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (0 <= y < cdb.WORLD_HEIGHT):
+                continue
+            java_block_id = tick.get("i")
+            if not isinstance(java_block_id, str):
+                continue
+            mapped = mapper.lookup_state(java_block_id)
+            if mapped is None:
+                continue
+            if mapped[0] == 0:
+                continue
+            try:
+                delay = int(tick.get("t", 0))
+            except (TypeError, ValueError):
+                delay = 0
+            ticks_by_chunk[(x // 16, z // 16)].append({
+                "x": x,
+                "y": y,
+                "z": z,
+                "tileID": int(mapped[0]),
+                "time": delay,
+            })
 
         progress.status(
             f"Writing MC3DS chunks {region_start_chunk_x:d}, {region_start_chunk_z:d} to "
@@ -687,7 +864,7 @@ def insert_region_directory(
                         result.new_slots.append(slot)
                         progress.status(f"Created slt{slot:d}.cdb (copy of {slot_files[0].name})")
 
-                terrain, terrain_size = region.terrain(local_x, local_z)
+                terrain, terrain_size = region.terrain(local_x, local_z,item_frames_by_chunk.get((chunk_x, chunk_z)))
                 be_list = block_entities.get((chunk_x, chunk_z))
                 be_list = _ensure_block_entity_stubs(
                     be_list, terrain, chunk_x, chunk_z
@@ -707,6 +884,14 @@ def insert_region_directory(
                 else:
                     ent_compressed, ent_size = None, 0
 
+                tick_list = ticks_by_chunk.get((chunk_x, chunk_z))
+                if tick_list:
+                    raw_ticks = cdb.write_tick_section(tick_list)
+                    tick_compressed = zlib.compress(raw_ticks)
+                    tick_size = len(raw_ticks)
+                else:
+                    tick_compressed, tick_size = None, 0
+
                 def blob(page_magic: int) -> bytes:
                     return cdb.build_chunk_blob(
                         packed,
@@ -717,6 +902,8 @@ def insert_region_directory(
                         page_magic,
                         ent_compressed,
                         ent_size,
+                        tick_compressed,
+                        tick_size,
                     )
 
                 try:

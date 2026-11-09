@@ -162,6 +162,9 @@ class JavaChunk:
             self._sections = level["Sections"] if "Sections" in level else []
             self.tile_entities = level["TileEntities"] if "TileEntities" in level else []
             self.entities = level["Entities"] if "Entities" in level else []
+            self.block_ticks = level["TileTicks"] if "TileTicks" in level else []
+            self.fluid_ticks = level["LiquidTicks"] if "LiquidTicks" in level else []
+            self.biomes = (np.asarray(level["Biomes"].value, dtype=np.int32) if "Biomes" in level else None)
             self.lowest_section = 0
         else:
             chunk = anvil.Chunk(nbt_data)
@@ -175,8 +178,11 @@ class JavaChunk:
                 self.entities = nbt_data["Entities"]
             else:
                 self.entities = getattr(chunk, "entities", []) or []
+            self.block_ticks = (nbt_data["block_ticks"] if "block_ticks" in nbt_data else nbt_data["TileTicks"] if "TileTicks" in nbt_data else [])
+            self.fluid_ticks = (nbt_data["fluid_ticks"] if "fluid_ticks" in nbt_data else nbt_data["LiquidTicks"] if "LiquidTicks" in nbt_data else [])
             # 1.18+ worlds start at y=-64
             self.lowest_section = -4
+            self.biomes = None
 
     def section(self, y: int) -> nbt.TAG_Compound | None:
         for section in self._sections:
@@ -230,6 +236,16 @@ class JavaChunk:
                 block = anvil.Block("legacy", f"{block_id:d}:{block_data:d}")
             palette.append(block)
         return palette, indices.astype(np.uint32)
+
+    def block_state_at(self,x: int,y: int,z: int,legacy_blocks: dict,):
+        section_y = y // 16
+        result = self.blocks(section_y, legacy_blocks)
+        if result is None:
+            return None
+        palette, indices = result
+        index = (y % 16) * 256 + (z % 16) * 16 + (x % 16)
+        palette_index = int(indices[index])
+        return palette[palette_index]
 
 
 class RegionReader:

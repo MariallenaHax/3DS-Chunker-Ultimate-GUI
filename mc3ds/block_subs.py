@@ -130,8 +130,6 @@ class SimilarBlockMapper:
             return "prismarine" if "dead" not in bare else "stone"
         if bare.endswith("_cauldron"):
             return "cauldron"
-        if bare.endswith("_head") or bare.endswith("_skull"):
-            return "skeleton_skull" if "wall" not in bare else "skeleton_wall_skull"
         return None
 
     def _lookup_substituted(self, name: str, properties: dict) -> tuple[int, int] | None:
@@ -194,3 +192,33 @@ class SimilarBlockMapper:
             ids[i] = bid & 0xFF
             data[i] = meta & 0xF
         return ids, data
+    
+    def lookup_state(self, java_block_id: str) -> tuple[int, int] | None:
+        if not isinstance(java_block_id, str):
+            return None
+
+        name = java_block_id.lower().strip()
+
+        if ":" in name:
+            namespace, bare = name.split(":", 1)
+            if namespace != "minecraft":
+                return None
+        else:
+            bare = name
+
+        if bare in ("air", "cave_air", "void_air"):
+            return (0, 0)
+
+        hit = self._lookup_substituted(bare, {})
+        if hit is not None:
+            return hit
+
+        alt = self._resolve_name(bare)
+        if alt:
+            hit = self._lookup_substituted(alt, {})
+            if hit is not None:
+                self.substituted[f"{bare}→{alt}"] += 1
+                return hit
+
+        self.still_missing[name] += 1
+        return None
