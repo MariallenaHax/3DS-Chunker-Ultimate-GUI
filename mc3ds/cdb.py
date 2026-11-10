@@ -273,6 +273,9 @@ _FORCE_INT = frozenset(
         "x",
         "y",
         "z",
+        "TileX", 
+        "TileY",
+        "TileZ",
         "pairx",
         "pairz",
         "TransferCooldown",
@@ -288,8 +291,9 @@ _FORCE_INT = frozenset(
         "Levels",
         "Primary",
         "Secondary",
-        "Base",
         "mData",
+        "LastDimensionId",
+        "PortalCooldown",
     }
 )
 _FORCE_SHORT = frozenset(
@@ -302,10 +306,12 @@ _FORCE_SHORT = frozenset(
         "BurnTime",
         "CookTime",
         "BrewTime",
+        "DeathTime",
     }
 )
 _FORCE_BYTE = frozenset(
     {
+        "BodyRot",
         "Count",
         "Slot",
         "isMovable",
@@ -314,6 +320,8 @@ _FORCE_BYTE = frozenset(
         "Sticky",
         "TrackOutput",
         "ItemRotation",
+        "Direction",
+        "Dir",
         "auto",
         "powered",
         "Findable",
@@ -321,10 +329,14 @@ _FORCE_BYTE = frozenset(
         "SkullType",
         "facing",
         "Rot",
+        "SpawnedByNight",
     }
 )
 _FORCE_FLOAT = frozenset(
     {
+        "Base",
+        "Current",
+        "Max",
         "Progress",
         "LastProgress",
         "ItemDropChance",
@@ -384,7 +396,7 @@ def _tag_type_for_key(key: str, value) -> int:
     if key in ("UniqueID", "UUIDMost", "UUIDLeast") and isinstance(value, int):
         return TAG_LONG
     if key == "id" and isinstance(value, int):
-        return TAG_SHORT if -32768 <= value <= 32767 else TAG_INT
+        return TAG_INT
     if key == "id" and isinstance(value, str):
         return TAG_STRING
     return _infer_tag_type(value)

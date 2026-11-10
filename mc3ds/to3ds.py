@@ -678,6 +678,24 @@ class JavaRegion:
                     indices = np.asarray(indices).reshape(16, 16, 16)
                     for palette_index, block in enumerate(palette):
                         block_name = str(block.name())
+                        if block_name in ("minecraft:piston","minecraft:sticky_piston",):
+                            properties = block.properties
+                            extended = properties.get("extended", False)
+                            facing = properties.get("facing", "north")
+                            positions = np.argwhere(indices == palette_index)
+                            for rel_y, rel_z, rel_x in positions:
+                                x = local_x * 16 + int(rel_x)
+                                z = local_z * 16 + int(rel_z)
+                                y = section_y * 16 + int(rel_y)
+                                y2 = y + self.y_shift
+                                if not (0 <= y2 < cdb.WORLD_HEIGHT):
+                                    continue
+                                world_x = base_block_x + x
+                                world_z = base_block_z + z
+                                synthetic_entity = {"id": "PistonArm","Progress": 0.0,"LastProgress": 0.0,"State": 2 if extended else 0,"NewState": 0,"Sticky": int(block_name == "minecraft:sticky_piston")}
+                                converted = convert_block_entity(synthetic_entity,world_x,y2,world_z,self._item_mapper,facing=facing)
+                                if converted: grouped[(world_x // 16, world_z // 16)].append(converted)
+                                continue
                         pot_item = POTTED_BLOCKS.get(block_name)
                         if pot_item is None:
                             continue

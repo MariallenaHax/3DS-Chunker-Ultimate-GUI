@@ -86,8 +86,7 @@ BLOCK_ENTITY_IDS = {
     "minecraft:sticky_piston": "PistonArm",
     "piston": "PistonArm",
     "sticky_piston": "PistonArm",
-    "minecraft:moving_piston": "PistonArm",
-    "minecraft:piston_head": "PistonArm",
+    "minecraft:moving_piston": "MovingBlock",
     "PistonArm": "PistonArm",
     "MovingBlock": "MovingBlock",
     "minecraft:command_block": "CommandBlock",
@@ -222,7 +221,10 @@ def convert_block_entity(entity: dict, x: int, y: int, z: int, mapper: ItemMappe
             result["ItemDropChance"] = float(entity["ItemDropChance"])
         return result
 
-    if be_id in ("PistonArm", "MovingBlock"):
+    if be_id in ("MovingBlock"):
+        result["movingBlock"] = entity["blockState"]
+        
+    if be_id in ("PistonArm"):
         # Facing lives in block metadata only — not NBT (dump: sub_372d48).
         if "Progress" in entity:
             result["Progress"] = float(entity["Progress"])

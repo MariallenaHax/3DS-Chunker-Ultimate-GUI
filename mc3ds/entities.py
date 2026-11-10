@@ -230,21 +230,24 @@ def convert_entity(
     motion = entity.get("Motion") or [0.0, 0.0, 0.0]
     motion = _f64_list(motion, 3)
 
-    uid = entity.get("UUIDMost") or entity.get("UUIDLeast") or entity.get("UniqueID")
-    if isinstance(uid, (list, tuple)) and len(uid) >= 2:
-        unique = (int(uid[0]) << 32) | (int(uid[1]) & 0xFFFFFFFF)
-    elif uid is not None:
-        unique = int(uid)
+    uuid_most = entity.get("UUIDMost")
+    uuid_least = entity.get("UUIDLeast")
+
+    if uuid_most is not None and uuid_least is not None:
+        unique = ((int(uuid_most) & 0xFFFFFFFFFFFFFFFF) << 64) | (int(uuid_least) & 0xFFFFFFFFFFFFFFFF)
+        unique &= 0xFFFFFFFFFFFFFFFF
+    elif entity.get("UniqueID") is not None:
+        unique = int(entity["UniqueID"])
     else:
         unique = mapper.next_unique_id()
-    # NBT TAG_Long is signed; keep UniqueID in int64 range
-    unique = int(unique) & 0xFFFFFFFFFFFFFFFF
+        
+    unique &= 0xFFFFFFFFFFFFFFFF
     if unique >= 0x8000000000000000:
         unique -= 0x10000000000000000
 
     result: dict[str, Any] = {
         "id": int(type_id),
-        "definitions": ["+", ident],
+        "definitions": [] if (type_id & 0xFF) == 0x53 else ["+" + ident],
         "UniqueID": int(unique),
         "Pos": pos,
         "Rotation": rot,
@@ -265,32 +268,80 @@ def convert_entity(
         result["CustomNameVisible"] = int(bool(entity.get("CustomNameVisible", True)))
 
     # --- Mob / animal extras ---
+    source_attributes = entity.get("Attributes") or []
+    healths = float(0)
+    attribute_names = {
+        "generic.maxHealth": "minecraft:health",
+        "minecraft:generic.max_health": "minecraft:health",
+
+        "generic.movementSpeed": "minecraft:movement",
+        "generic.movement_speed": "minecraft:movement",
+        "minecraft:generic.movement_speed": "minecraft:movement",
+
+        "generic.knockbackResistance": "minecraft:knockback_resistance",
+        "generic.knockback_resistance": "minecraft:knockback_resistance",
+        "minecraft:generic.knockback_resistance": "minecraft:knockback_resistance",
+
+        "generic.attackDamage": "minecraft:attack_damage",
+        "generic.attack_damage": "minecraft:attack_damage",
+        "minecraft:generic.attack_damage": "minecraft:attack_damage",
+
+        "generic.armor": "minecraft:armor",
+        "minecraft:generic.armor": "minecraft:armor",
+
+        "generic.luck": "minecraft:luck",
+        "minecraft:generic.luck": "minecraft:luck",
+    }
+
+    converted_attributes = {}
+
+    for attr in source_attributes:
+        if not isinstance(attr, dict):
+            continue
+
+        source_name = attr.get("Name")
+        target_name = attribute_names.get(source_name)
+
+        if target_name is None:
+            continue
+
+        base = attr.get("Base")
+        if base is None:
+            base = attr.get("Current")
+
+        if base is None:
+            continue
+        if source_name == "generic.maxHealth" or source_name == "minecraft:generic.max_health":
+            healths = float(attr.get("Max", base))
+        converted_attributes[target_name] = {
+            "Base": float(base),
+            "Current": float(base),
+            "Max": float(attr.get("Max", base)),
+            "Name": target_name,
+        }
+
     health = entity.get("Health")
-    if health is None and "Attributes" in entity:
-        for attr in entity.get("Attributes") or []:
-            if isinstance(attr, dict) and attr.get("Name") in ("generic.maxHealth", "minecraft:health", "health"):
-                health = attr.get("Base") or attr.get("Current")
-                break
+
     if health is not None:
-        # Legacy Health short for Mob::load; Attributes preferred by save path
-        result["Health"] = float(health)
-        result["Attributes"] = [
-            {
-                "Name": "minecraft:health",
-                "Base": float(health),
-                "Current": float(health),
-                "DefaultMax": float(health),
-                "DefaultMin": 0.0,
-                "Max": float(health),
-                "Min": 0.0,
-            }
-        ]
+        health = float(health)
+        converted_attributes["minecraft:health"] = {
+            "Name": "minecraft:health",
+            "Base": healths,
+            "Current": health,
+            "Max": healths,
+        }
+
+    if converted_attributes:
+        result["Attributes"] = list(converted_attributes.values())
 
     if "HurtTime" in entity:
         result["HurtTime"] = int(entity["HurtTime"])
     if "DeathTime" in entity:
         result["DeathTime"] = int(entity["DeathTime"])
-    result["Persistent"] = 1  # imported entities should not despawn
+    if "PersistenceRequired" in entity:
+        result["Persistent"] = int(bool(entity["PersistenceRequired"]))
+    else:
+        result["Persistent"] = 1
 
     # Sheep color / sheared
     if (type_id & 0xFF) == 0x0D and (type_id >> 8) == 0x13:
@@ -301,8 +352,8 @@ def convert_entity(
 
     # Creeper (match on low byte — high bits vary by variant packing)
     if (type_id & 0xFF) == 0x21:
-        if "powered" in entity or "powered" in str(entity.keys()).lower():
-            result["IsPowered"] = int(bool(entity.get("powered", entity.get("powered", False))))
+        if "powered" in entity:
+            result["IsPowered"] = int(bool(entity["powered"]))
         if "ExplosionRadius" in entity:
             result["ExplosionRadius"] = int(entity["ExplosionRadius"])
         if "Fuse" in entity:
@@ -335,15 +386,52 @@ def convert_entity(
 
     # Painting
     if (type_id & 0xFF) == 0x53:
-        if "Motive" in entity:
-            result["Motive"] = str(entity["Motive"]).replace("minecraft:", "")
-        elif "variant" in entity:
-            result["Motive"] = str(entity["variant"]).replace("minecraft:", "")
-        for key in ("TileX", "TileY", "TileZ", "Facing", "Direction"):
+        painting_names = {
+            "kebab": "Kebab",
+            "aztec": "Aztec",
+            "alban": "Alban",
+            "aztec2": "Aztec2",
+            "bomb": "Bomb",
+            "plant": "Plant",
+            "wasteland": "Wasteland",
+            "pool": "Pool",
+            "courbet": "Courbet",
+            "sea": "Sea",
+            "sunset": "Sunset",
+            "creebet": "Creebet",
+            "wanderer": "Wanderer",
+            "graham": "Graham",
+            "match": "Match",
+            "bust": "Bust",
+            "stage": "Stage",
+            "void": "Void",
+            "skull_and_roses": "SkullAndRoses",
+            "wither": "Wither",
+        }
+
+        motive = entity.get("Motive", entity.get("Variant", ""))
+        motive = str(motive).replace("minecraft:", "")
+
+        result["Motive"] = painting_names.get(
+            motive, motive.capitalize()
+        )
+        pos[2] += float(1)
+        for key in ("TileX", "TileY", "TileZ"):
             if key in entity:
-                result[key] = int(entity[key]) if key != "Facing" else int(entity[key])
-        if "Facing" in entity:
-            result["Direction"] = int(entity["Facing"])
+                if key in ("TileZ"):
+                    result[key] = int(entity[key] + 1)
+                else:
+                    result[key] = int(entity[key])
+
+        facing = entity.get(
+            "Facing",
+            entity.get("Direction", entity.get("facing"))
+        )
+
+        if facing is not None:
+            result["Direction"] = int(facing) & 0xFF
+
+        result["Dir"] = int(entity.get("Dir", 0)) & 0xFF
 
     # Minecart with chest / hopper — Items
     if (type_id & 0xFF) in (0x62, 0x60) and item_mapper is not None:
