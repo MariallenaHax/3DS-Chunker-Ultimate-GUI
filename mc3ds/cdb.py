@@ -397,6 +397,8 @@ def _tag_type_for_key(key: str, value) -> int:
         return TAG_LONG
     if key == "id" and isinstance(value, int):
         return TAG_INT
+    if key == "id" and isinstance(value, float):
+        return TAG_SHORT
     if key == "id" and isinstance(value, str):
         return TAG_STRING
     return _infer_tag_type(value)

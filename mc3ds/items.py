@@ -489,7 +489,7 @@ class ItemMapper:
         if item_id == 0:
             return None
         out: dict[str, Any] = {
-            "id": int(item_id),
+            "id": float(item_id),
             "Damage": int(meta),
             "Count": int(count) & 0xFF,
         }
