@@ -61,7 +61,7 @@ class ChunkerApp:
         self.warnings = 0
         root.title("MC3DS Chunker - GUI")
         root.geometry("760x640")
-        root.minsize(760, 560)
+        root.minsize(760, 760)
         root.config(background=BACKGROUND)
 
         self.ds_world = tk.StringVar()
@@ -69,6 +69,11 @@ class ChunkerApp:
         self.java_world = tk.StringVar()
         self.java_target = tk.StringVar()
         self.java_output = tk.StringVar(value=str(Path(getcwd()) / "output"))
+        self.pe_source = tk.StringVar()
+        self.pe_output = tk.StringVar(value=str(Path(getcwd()) / "output"))
+        self.pe_world = tk.StringVar()
+        self.pe_target = tk.StringVar()
+        self.pe_to3ds_output = tk.StringVar(value=str(Path(getcwd()) / "output"))
         self.dimensions = {0: tk.BooleanVar(value=True), 1: tk.BooleanVar(value=True), 2: tk.BooleanVar(value=False)}
         self.offset_x = tk.StringVar(value="0")
         self.offset_z = tk.StringVar(value="0")
@@ -109,6 +114,24 @@ class ChunkerApp:
         self.java_button = tk.Button(to_3ds, text="Convert Java to 3DS", command=self.startTo3DS)
         self.java_button.grid(row=5, column=0, columnspan=3, pady=(8, 0))
         to_3ds.columnconfigure(1, weight=1)
+
+        to_pe = tk.LabelFrame(root,text="MC3DS → PE",bg=BACKGROUND,fg=FOREGROUND,padx=8,pady=8)
+        to_pe.pack(fill=tk.X, padx=10, pady=5)
+
+        self.pathRow(to_pe, 0,"MC3DS world folder",self.pe_source)
+        self.pathRow(to_pe, 1,"Output folder",self.pe_output)
+        self.pe_button = tk.Button(to_pe,text="Convert 3DS to PE",command=self.startToPE)
+        self.pe_button.grid(row=3,column=0,columnspan=3,pady=(8, 0))
+        to_pe.columnconfigure(1, weight=1)
+
+        from_pe = tk.LabelFrame(root,text="PE → MC3DS",bg=BACKGROUND,fg=FOREGROUND,padx=8,pady=8)
+        from_pe.pack(fill=tk.X, padx=10, pady=5)
+        self.pathRow(from_pe,0,"PE world folder",self.pe_world)
+        self.pathRow(from_pe,1,"MC3DS world to insert into",self.pe_target)
+        self.pathRow(from_pe,2,"Output folder",self.pe_to3ds_output)
+        self.pe_to3ds_button = tk.Button(from_pe,text="Convert PE to 3DS",command=self.startTo3DSFromPE)
+        self.pe_to3ds_button.grid(row=3,column=0,columnspan=3,pady=(8, 0))
+        from_pe.columnconfigure(1, weight=1)
 
         status_frame = tk.Frame(root, bg=BACKGROUND)
         status_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
@@ -156,6 +179,8 @@ class ChunkerApp:
         state = tk.DISABLED if running else tk.NORMAL
         self.ds_button.config(state=state)
         self.java_button.config(state=state)
+        self.pe_button.config(state=state)
+        self.pe_to3ds_button.config(state=state)
 
     def startWorker(self, title: str, job) -> None:
         if self.worker is not None and self.worker.is_alive():
@@ -282,6 +307,54 @@ class ChunkerApp:
 
         self.startWorker(f"Java \u2192 MC3DS: {java_path}", job)
 
+
+    def startToPE(self) -> None:
+        source_path = Path(self.pe_source.get().strip())
+        output_path = Path(self.pe_output.get().strip() or getcwd())
+
+        if not (source_path / "level.dat").is_file() or not (source_path / "db" / "cdb").is_dir():
+            messagebox.showerror("Error","Pick an MC3DS world folder.")
+            return
+
+        with open(source_path / "level.dat", "rb") as f:
+            world_name = getWorldName(f.read())
+
+        world_out = output_path / safeFolderName(world_name)
+
+        if world_out.exists():
+            messagebox.showerror("Error",f"Output world already exists:\n{world_out}")
+            return
+
+        def job(progress: QueueProgress) -> str:
+            from mc3ds.tope import convert_3ds_to_pe
+            progress.status(f"Reading MC3DS world {world_name}...")
+            count = convert_3ds_to_pe(source_world=source_path,output_world=world_out,progress=progress)
+            return (f"Converted {count} chunks to PE:\n"f"{world_out}")
+
+        self.startWorker(f"MC3DS → PE: {source_path}",job,)
+
+    def startTo3DSFromPE(self) -> None:
+        pe_path = Path(self.pe_world.get().strip())
+        target_path = Path(self.pe_target.get().strip())
+        output_path = Path(self.pe_to3ds_output.get().strip() or getcwd())
+        if not (pe_path / "level.dat").is_file() or not (pe_path / "db").is_dir():
+            messagebox.showerror("Error","Pick a PE world folder.")
+            return
+        if not (target_path / "level.dat").is_file() or not (target_path / "db" / "cdb").is_dir():
+            messagebox.showerror("Error","Pick an MC3DS world folder.")
+            return
+        with open(target_path / "level.dat", "rb") as f:
+            world_name = getWorldName(f.read())
+        world_out = output_path / safeFolderName(world_name)
+        if world_out.exists():
+            messagebox.showerror("Error",f"Output world already exists:\n{world_out}")
+            return
+        def job(progress: QueueProgress) -> str:
+            from mc3ds.frompe import convert
+            progress.status(f"Reading PE world {pe_path}...")
+            count = convert(pe_world=pe_path,target_world=target_path,output_world=world_out,progress=progress)
+            return (f"Converted {count} chunks from PE to MC3DS:\n"f"{world_out}")
+        self.startWorker(f"PE → MC3DS: {pe_path}",job)
 
 def main() -> None:
     root = tk.Tk()

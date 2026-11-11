@@ -309,6 +309,9 @@ _FORCE_SHORT = frozenset(
         "DeathTime",
     }
 )
+_FORCE_LONG = frozenset({
+    "time",
+})
 _FORCE_BYTE = frozenset(
     {
         "BodyRot",
@@ -389,6 +392,8 @@ def _tag_type_for_key(key: str, value) -> int:
     if isinstance(value, bool) or key in _FORCE_BYTE:
         if isinstance(value, (int, bool)):
             return TAG_BYTE
+    if key in _FORCE_LONG and isinstance(value, int):
+        return TAG_LONG
     if key in _FORCE_SHORT and isinstance(value, int):
         return TAG_SHORT
     if key in _FORCE_INT and isinstance(value, int):

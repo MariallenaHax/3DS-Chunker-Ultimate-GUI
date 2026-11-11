@@ -722,7 +722,6 @@ class InsertResult:
     errors: int = 0
     new_slots: list = field(default_factory=list)
 
-
 def insert_region_directory(
     cdb_directory: Path,
     region_directory: Path,

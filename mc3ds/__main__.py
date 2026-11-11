@@ -93,6 +93,18 @@ from .convert import convert
     is_flag=True,
     help="Permanently delete the output and world folders, and their contents (make sure they're the right folders!)",
 )
+@click.option(
+    "--pe-to-3ds",
+    "mode",
+    flag_value="pe",
+    help="Convert a MCPE world into an MC3DS world",
+)
+@click.option(
+    "--3ds-to-pe",
+    "mode",
+    flag_value="3ds-to-pe",
+    help="Convert an MC3DS world into a MCPE world",
+)
 def main(
     path: Path,
     out: Path,
@@ -109,6 +121,18 @@ def main(
 
     start_time = time.time()
     script_path = Path(__file__).parent
+    if mode == "pe":
+        from .pe_to_3ds import convert as convert_pe_to_3ds
+        if target is None:
+            raise click.UsageError("--target is required with --pe-to-3ds")
+        result = convert_pe_to_3ds(path,out)
+        print(f"PE to MC3DS conversion completed: {result}")
+        return
+    if mode == "3ds-to-pe":
+        from .tope import convert as convert_to_pe
+        convert_to_pe(path,world_out,delete_out)
+        print(f"MC3DS to PE conversion completed: {world_out}")
+        return
     if mode == "java":
         from .to3ds import convert as convert_to_3ds
 
