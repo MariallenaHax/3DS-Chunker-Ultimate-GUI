@@ -392,6 +392,41 @@ WAL_FIRST = 2
 WAL_MIDDLE = 3
 WAL_LAST = 4
 
+def _prepare_item_nbt(value):
+    """
+    Ensure numeric item-stack IDs are written as TAG_SHORT.
+
+    cdb._tag_type_for_key() treats a floating-point "id" as TAG_SHORT.
+    This preserves ordinary entity IDs and tick IDs as integers.
+    """
+    if isinstance(value, dict):
+        is_item_stack = (
+            isinstance(value.get("id"), (int, float))
+            and not isinstance(value.get("id"), bool)
+            and (
+                "Count" in value
+                or "count" in value
+            )
+        )
+
+        result = {}
+
+        for key, item in value.items():
+            if is_item_stack and key == "id":
+                result[key] = float(item)
+            else:
+                result[key] = _prepare_item_nbt(item)
+
+        return result
+
+    if isinstance(value, list):
+        return [
+            _prepare_item_nbt(item)
+            for item in value
+        ]
+
+    return value
+
 def _make_crc32c_table():
     table = []
 
@@ -1137,9 +1172,13 @@ def _read_pe_chunk(
         found = True
 
         try:
-            chunk[name].extend(
-                cdb.read_nbt_stream(value)
-            )
+            compounds = cdb.read_nbt_stream(value)
+            if name in ("block_entities", "entities"):
+                compounds = [
+                    _prepare_item_nbt(compound)
+                    for compound in compounds
+                ]
+            chunk[name].extend(compounds)
 
         except Exception as exc:
             _warning(

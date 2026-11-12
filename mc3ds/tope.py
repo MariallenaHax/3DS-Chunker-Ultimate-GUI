@@ -60,14 +60,17 @@ def iter_cdb_chunks(world_path: Path):
                 )
 
             magic, stored_position = struct.unpack_from("<II", blob, 0)
-
+            isNUMC = 0
             if magic == 0:
                 continue
 
             if magic not in (cdb.MAGIC_CDB, cdb.ALT_MAGIC_CDB):
-                raise PEConversionError(
-                    f"Invalid CDB magic: {magic:#x}"
-                )
+                if magic == cdb.NUMC_MAGIC_CDB:
+                    isNUMC = 1
+                else:
+                    raise PEConversionError(
+                        f"Invalid CDB magic: {magic:#x}"
+                    )
 
             if stored_position != packed:
                 raise PEConversionError(
@@ -78,9 +81,11 @@ def iter_cdb_chunks(world_path: Path):
 
             sections = {}
 
+            descriptor_base = 0x14 if isNUMC else 0x10
+
             for descriptor_number in range(cdb.SECTION_COUNT):
                 descriptor_offset = (
-                    0x10
+                    descriptor_base
                     + descriptor_number
                     * struct.calcsize(cdb.SECTION_DESCRIPTOR_FORMAT)
                 )
@@ -109,7 +114,11 @@ def iter_cdb_chunks(world_path: Path):
                 if compressed_size <= 0 or raw_size < 0:
                     raise PEConversionError(
                         f"Invalid section sizes at ({chunk_x}, {chunk_z}), "
-                        f"section {section_index}"
+                        f"section {section_index}: "
+                        f"offset={section_offset:#x}, "
+                        f"compressed_size={compressed_size:#x}, "
+                        f"raw_size={raw_size:#x}, "
+                        f"descriptor_offset={descriptor_offset:#x}"
                     )
 
                 if section_index in sections:
@@ -119,8 +128,13 @@ def iter_cdb_chunks(world_path: Path):
                     )
 
                 section_end = section_offset + compressed_size
+                header_size = (
+                    cdb.NUMC_CHUNK_HEADER_SIZE
+                    if isNUMC
+                    else cdb.CHUNK_HEADER_SIZE
+                )
 
-                if section_offset < cdb.CHUNK_HEADER_SIZE:
+                if section_offset < header_size:
                     raise PEConversionError(
                         f"Invalid section offset at ({chunk_x}, {chunk_z})"
                     )
