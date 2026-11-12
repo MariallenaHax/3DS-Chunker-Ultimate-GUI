@@ -297,6 +297,7 @@ _FORCE_INT = frozenset(
         "mData",
         "LastDimensionId",
         "PortalCooldown",
+        "EntityId"
     }
 )
 _FORCE_SHORT = frozenset(
@@ -310,10 +311,25 @@ _FORCE_SHORT = frozenset(
         "CookTime",
         "BrewTime",
         "DeathTime",
+        "MaxNearbyEntities",
+        "MaxSpawnDelay",
+        "MinSpawnDelay",
+        "RequiredPlayerRange",
+        "SpawnCount",
+        "SpawnRange"
     }
 )
 _FORCE_LONG = frozenset({
+    "Time",
     "time",
+    "worldStartCount",
+    "RandomSeed",
+    "LastPlayed",
+    "currentTick",
+    "UniqueID",
+    "TargetID",
+    "LeasherID",
+    "OwnerNew",
 })
 _FORCE_BYTE = frozenset(
     {
