@@ -373,6 +373,35 @@ POTION_DAMAGE = {
     "long_weakness": 35
 }
 
+ENCHANTMENT_IDS = {
+    "minecraft:protection": 0,
+    "minecraft:fire_protection": 1,
+    "minecraft:feather_falling": 2,
+    "minecraft:blast_protection": 3,
+    "minecraft:projectile_protection": 4,
+    "minecraft:thorns": 5,
+    "minecraft:respiration": 6,
+    "minecraft:aqua_affinity": 7,
+    "minecraft:sharpness": 9,
+    "minecraft:smite": 10,
+    "minecraft:bane_of_arthropods": 11,
+    "minecraft:knockback": 12,
+    "minecraft:fire_aspect": 13,
+    "minecraft:looting": 14,
+    "minecraft:efficiency": 15,
+    "minecraft:silk_touch": 16,
+    "minecraft:unbreaking": 17,
+    "minecraft:fortune": 18,
+    "minecraft:power": 19,
+    "minecraft:punch": 20,
+    "minecraft:flame": 21,
+    "minecraft:infinity": 22,
+    "minecraft:luck_of_the_sea": 23,
+    "minecraft:lure": 24,
+    "minecraft:frost_walker": 25,
+    "minecraft:mending": 26,
+}
+
 def _nbt_value(value):
     return value.value if hasattr(value, "value") else value
 
@@ -502,11 +531,21 @@ class ItemMapper:
         return out
 
     def _convert_tag(self, tag: dict) -> dict:
-        # Pass through primitives; convert display/ench names when obvious
         out = {}
         for k, v in tag.items():
-            if k == "ench" and isinstance(v, list):
-                out["ench"] = v  # same shape in PE
+            if k == "Enchantments" and isinstance(v, list):
+                ench = []
+                for entry in v:
+                    if not isinstance(entry, dict):
+                        continue
+                    enchant_id = ENCHANTMENT_IDS.get(entry.get("id"))
+                    if enchant_id is None:
+                        continue
+                    ench.append({
+                        "id": float(enchant_id),
+                        "lvl": float(entry.get("lvl", 0)),
+                    })
+                out["ench"] = ench
             elif k == "display" and isinstance(v, dict):
                 out["display"] = v
             elif isinstance(v, (int, float, str, list, dict, bool)):
