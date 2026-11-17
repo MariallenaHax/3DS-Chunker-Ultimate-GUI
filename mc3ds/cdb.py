@@ -297,7 +297,9 @@ _FORCE_INT = frozenset(
         "mData",
         "LastDimensionId",
         "PortalCooldown",
-        "EntityId"
+        "EntityId",
+        "SuccessCount",
+        "LPCommandMode",
     }
 )
 _FORCE_SHORT = frozenset(
@@ -333,6 +335,7 @@ _FORCE_LONG = frozenset({
 })
 _FORCE_BYTE = frozenset(
     {
+        "auto",
         "BodyRot",
         "Count",
         "Slot",
@@ -352,6 +355,8 @@ _FORCE_BYTE = frozenset(
         "facing",
         "Rot",
         "SpawnedByNight",
+        "LPCondionalMode",
+        "LPRedstoneMode",
     }
 )
 _FORCE_FLOAT = frozenset(
@@ -425,6 +430,8 @@ def _tag_type_for_key(key: str, value) -> int:
         return TAG_SHORT
     if key == "id" and isinstance(value, str):
         return TAG_STRING
+    if key == "lvl" and isinstance(value, float):
+        return TAG_SHORT
     return _infer_tag_type(value)
 
 
