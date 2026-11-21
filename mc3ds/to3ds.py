@@ -680,7 +680,11 @@ class JavaRegion:
                         block_name = str(block.name())
                         if block_name in ("minecraft:piston","minecraft:sticky_piston",):
                             properties = block.properties
-                            extended = properties.get("extended", False)
+                            extended_value = properties.get("extended", False)
+                            if isinstance(extended_value, str):
+                                extended = extended_value.lower() == "true"
+                            else:
+                                extended = bool(extended_value)
                             facing = properties.get("facing", "north")
                             positions = np.argwhere(indices == palette_index)
                             for rel_y, rel_z, rel_x in positions:
