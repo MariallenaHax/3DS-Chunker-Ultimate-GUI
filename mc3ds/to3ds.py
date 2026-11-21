@@ -692,7 +692,7 @@ class JavaRegion:
                                     continue
                                 world_x = base_block_x + x
                                 world_z = base_block_z + z
-                                synthetic_entity = {"id": "PistonArm","Progress": 0.0,"LastProgress": 0.0,"State": 2 if extended else 0,"NewState": 0,"Sticky": int(block_name == "minecraft:sticky_piston")}
+                                synthetic_entity = {"id": "PistonArm","Progress": 1.0 if extended else 0.0,"LastProgress": 1.0 if extended else 0.0,"State": 2 if extended else 0,"NewState": 2 if extended else 0,"Sticky": int(block_name == "minecraft:sticky_piston")}
                                 converted = convert_block_entity(synthetic_entity,world_x,y2,world_z,self._item_mapper,facing=facing)
                                 if converted: grouped[(world_x // 16, world_z // 16)].append(converted)
                                 continue
