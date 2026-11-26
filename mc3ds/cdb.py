@@ -8,7 +8,7 @@ both conversion directions. It follows the reference inserter in
 World layout::
 
     <world>/level.dat           8 byte Bedrock-style header + little endian NBT
-    <world>/db/vdb/slt*.vdb     misc. named data (untouched by the converters)
+    <world>/db/vdb/slt*.vdb     misc. named data
     <world>/db/cdb/index.cdb    chunk index
     <world>/db/cdb/newindex.cdb chunk index, kept identical to index.cdb
     <world>/db/cdb/slt<N>.cdb   "slot" files, 128 fixed size subfiles each
@@ -83,7 +83,7 @@ SECTION_ENTITIES = 2
 SECTION_TICKS = 3
 
 WORLD_HEIGHT = 128
-MAX_SUBCHUNKS = WORLD_HEIGHT // 16
+MAX_SUBCHUNKS = 9
 SUBCHUNK_VERSION = 0
 BLOCKS_SIZE = 0x1000
 NIBBLES_SIZE = 0x800

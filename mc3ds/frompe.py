@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import cdb, leveldb115
+from .vdb import VDB, VDBError, import_leveldb_records, VDBTransferError
 
 
 class PEConversionError(RuntimeError):
@@ -50,6 +51,15 @@ def _update(progress: Any, current: int, total: int) -> None:
     if progress is not None and hasattr(progress, "update"):
         progress.update(current, total)
 
+
+
+
+def _is_chunk_state_or_version_key(key: bytes) -> bool:
+    key = bytes(key)
+    if len(key) in (9, 13):
+        prefix_size = len(key) - 1
+        return key[prefix_size] in (0x36, 0x76)
+    return False
 
 def _decode_chunk_key(key: bytes):
     """
@@ -862,9 +872,6 @@ class PELevelDBSSTReader:
                     # user_key + 8-byte sequence/type.
                     user_key = internal_key[:-8]
 
-                    if _decode_chunk_key(user_key) is None:
-                        continue
-
                     sequence_type = struct.unpack(
                         "<Q",
                         internal_key[-8:],
@@ -908,9 +915,6 @@ class PELevelDBSSTReader:
                 value,
             ) in _parse_write_batch(batch):
 
-                if _decode_chunk_key(key) is None:
-                    continue
-
                 old = self.records.get(key)
 
                 # Keep the newest version, including deletion records.
@@ -925,6 +929,22 @@ class PELevelDBSSTReader:
                         value,
                     )
 
+
+    def iter_non_chunk_records(self):
+        """Yield live non-chunk LevelDB key/value pairs in raw byte form.
+
+        The SST index stores metadata for every user key, but values are
+        decompressed only when requested. Chunk-scoped keys are reserved for
+        CDB conversion and are excluded here.
+        """
+        for key, record in self.records.items():
+            if _decode_chunk_key(key) is not None:
+                continue
+            if record[1] == 0:
+                continue
+            value = self.get(key)
+            if value is not None:
+                yield key, value
 
     def get(self, key: bytes):
         """
@@ -1491,6 +1511,7 @@ def convert(
         / "db"
         / "cdb"
     )
+    target_vdb = target_world / "db" / "vdb"
 
     if (
         not (pe_world / "level.dat").is_file()
@@ -1504,10 +1525,11 @@ def convert(
     if (
         not (target_world / "level.dat").is_file()
         or not target_cdb.is_dir()
+        or not target_vdb.is_dir()
     ):
         raise PEConversionError(
-            f"{target_world} is not an MC3DS world "
-            f"(level.dat and db/cdb are required)"
+            f"{target_world} is not a complete MC3DS world "
+            f"(level.dat, db/cdb and db/vdb are required)"
         )
 
     if output_world.exists():
@@ -1557,6 +1579,31 @@ def convert(
 
         reader = PELevelDBSSTReader(
             pe_db_path
+        )
+
+        # Transfer non-chunk world/player/map metadata into the copied VDB.
+        # Chunk-scoped records are filtered by iter_non_chunk_records() and
+        # remain the responsibility of the CDB conversion below.
+        _status(progress, "Transferring PE world records to MC3DS VDB...")
+        try:
+            vdb = VDB(output_world / "db" / "vdb")
+            transfer_stats = import_leveldb_records(
+                reader.iter_non_chunk_records(),
+                vdb,
+                warning=lambda message: _warning(progress, message),
+            )
+        except (VDBError, VDBTransferError) as exc:
+            raise PEConversionError(
+                f"Could not transfer PE non-chunk records to VDB: {exc}"
+            ) from exc
+
+        _status(
+            progress,
+            "VDB records: "
+            f"{transfer_stats.copied} copied, "
+            f"{transfer_stats.replaced} replaced, "
+            f"{transfer_stats.added} added, "
+            f"{transfer_stats.skipped_chunk_records} chunk records skipped.",
         )
 
         positions = reader.positions
