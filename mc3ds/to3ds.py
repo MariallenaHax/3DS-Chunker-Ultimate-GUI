@@ -240,18 +240,15 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
     root = read_map(map_path)
     data = root["data"]
 
-    map_id = int(map_path.stem.removeprefix("map_")) + 1
+    java_map_id = int(map_path.stem.removeprefix("map_"))
+    map_id = -(java_map_id + 1)
     colors = bytes(data["colors"])
 
     rgba = convert_map_colors(colors, palette)
 
     map_nbt = nbtlib.Compound({
         "mapId": nbtlib.Long(map_id),
-        "parentMapId": nbtlib.Long(
-            int(map_path.stem.removeprefix("map_"))
-            if int(map_path.stem.removeprefix("map_")) > 0
-            else -1
-        ),
+        "parentMapId": nbtlib.Long(-1),
         "dimension": nbtlib.Byte(
             int(data.get("dimension", 0))
         ),
