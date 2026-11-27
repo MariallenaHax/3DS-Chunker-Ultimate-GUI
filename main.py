@@ -61,7 +61,7 @@ class ChunkerApp:
         self.warnings = 0
         root.title("MC3DS Chunker - GUI")
         root.geometry("760x640")
-        root.minsize(760, 760)
+        root.minsize(760, 800)
         root.config(background=BACKGROUND)
 
         self.ds_world = tk.StringVar()
@@ -77,6 +77,7 @@ class ChunkerApp:
         self.dimensions = {0: tk.BooleanVar(value=True), 1: tk.BooleanVar(value=True), 2: tk.BooleanVar(value=False)}
         self.offset_x = tk.StringVar(value="0")
         self.offset_z = tk.StringVar(value="0")
+        self.vdb_mode = tk.StringVar(value="keep_all")
 
         to_java = tk.LabelFrame(root, text="MC3DS \u2192 Java", bg=BACKGROUND, fg=FOREGROUND, padx=8, pady=8)
         to_java.pack(fill=tk.X, padx=10, pady=(10, 5))
@@ -94,6 +95,27 @@ class ChunkerApp:
 
         options = tk.Frame(to_3ds, bg=BACKGROUND)
         options.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        vdb_options = tk.Frame(to_3ds, bg=BACKGROUND)
+        vdb_options.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+        self.label(vdb_options, "VDB data:").pack(side=tk.LEFT)
+
+        for value, text in (
+            ("keep_all", "Keep all"),
+            ("keep_biome", "Keep BiomeData only"),
+            ("clear_all", "Clear all"),
+        ):
+            tk.Radiobutton(
+                vdb_options,
+                text=text,
+                variable=self.vdb_mode,
+                value=value,
+                bg=BACKGROUND,
+                fg=FOREGROUND,
+                selectcolor=BACKGROUND,
+                activebackground=BACKGROUND,
+                activeforeground=FOREGROUND,
+            ).pack(side=tk.LEFT, padx=(5, 0))
         self.label(options, "Dimensions:").pack(side=tk.LEFT)
         for dimension, name in ((0, "Overworld"), (1, "Nether"), (2, "End")):
             tk.Checkbutton(
@@ -110,9 +132,9 @@ class ChunkerApp:
             "copied from the 3DS). A bare region folder uses the first checked dimension. "
             "Block X/Z is where Java block (0, 0) lands in the MC3DS world (snapped down to a chunk).",
             wraplength=720, justify=tk.LEFT,
-        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self.java_button = tk.Button(to_3ds, text="Convert Java to 3DS", command=self.startTo3DS)
-        self.java_button.grid(row=5, column=0, columnspan=3, pady=(8, 0))
+        self.java_button.grid(row=6, column=0, columnspan=3, pady=(8, 0))
         to_3ds.columnconfigure(1, weight=1)
 
         to_pe = tk.LabelFrame(root,text="MC3DS → PE",bg=BACKGROUND,fg=FOREGROUND,padx=8,pady=8)
@@ -276,6 +298,7 @@ class ChunkerApp:
             messagebox.showerror("Error", "Block X/Z must be whole numbers (Java/MC3DS block coords).")
             return
         # Converter places by chunk; snap toward -inf so block 0..15 → chunk 0
+        vdb_mode = self.vdb_mode.get()
         start_chunk = (block_x // 16, block_z // 16)
 
         def job(progress: QueueProgress) -> str:
@@ -283,7 +306,7 @@ class ChunkerApp:
 
             result = convert(
                 java_path, target_path, output_path, dimensions=dimensions,
-                region_dimension=dimensions[0], start_chunk=start_chunk, progress=progress,
+                region_dimension=dimensions[0], start_chunk=start_chunk, vdb_mode=vdb_mode, progress=progress,
             )
             snapped_x, snapped_z = start_chunk[0] * 16, start_chunk[1] * 16
             summary = (
