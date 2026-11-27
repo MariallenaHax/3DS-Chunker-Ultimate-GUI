@@ -248,8 +248,8 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
     map_nbt = nbtlib.Compound({
         "mapId": nbtlib.Long(map_id),
         "parentMapId": nbtlib.Long(
-            int(data.get("parentMapId", -1)) + 1
-            if int(data.get("parentMapId", -1)) >= 0
+            int(map_path.stem.removeprefix("map_"))
+            if int(map_path.stem.removeprefix("map_")) > 0
             else -1
         ),
         "dimension": nbtlib.Byte(
