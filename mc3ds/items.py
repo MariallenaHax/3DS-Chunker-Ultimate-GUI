@@ -524,10 +524,15 @@ class ItemMapper:
         }
         if slot is not None:
             out["Slot"] = int(slot) & 0xFF
-        # preserve nested tag / components lightly
         tag = stack.get("tag") or stack.get("components")
         if isinstance(tag, dict) and tag:
-            out["tag"] = self._convert_tag(tag)
+            converted_tag = self._convert_tag(tag)
+            if "map" in tag:
+                map_id = int(tag["map"])
+                converted_tag.pop("map", None)
+                converted_tag["map_uuid"] = str(map_id)
+                converted_tag["map_name_index"] = map_id
+            out["tag"] = converted_tag
         return out
 
     def _convert_tag(self, tag: dict) -> dict:

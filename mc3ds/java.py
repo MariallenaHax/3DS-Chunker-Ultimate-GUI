@@ -97,6 +97,7 @@ def read_level_data(world_path: Path) -> dict | None:
         "name": str(data.get("LevelName", "")),
         "data_version": int(data["DataVersion"]) if "DataVersion" in data else None,
         "version_name": str(version["Name"]) if version and "Name" in version else None,
+        "player": data.get("Player"),
     }
 
 

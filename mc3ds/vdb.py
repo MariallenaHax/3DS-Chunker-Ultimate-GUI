@@ -1,4 +1,4 @@
-"""Reader and writer for vanilla Minecraft 3DS VDB files.
+"""Reader and writer for MC3DS VDB files.
 
 Index:
     Header: 6 little-endian uint32 values (0x18 bytes)
@@ -277,7 +277,6 @@ class VDB:
         self.entries_offset = 0
 
         self._parse_index()
-
     # ------------------------------------------------------------------
     # Index parsing
     # ------------------------------------------------------------------
@@ -530,15 +529,17 @@ class VDB:
             raise VDBError(
                 f"Invalid record name encoding for {expected_key!r}"
             ) from exc
-
-        unknown1, unknown2 = struct.unpack_from(
-            "<HH",
-            blob,
-            name_end,
-        )
+            
+        unknown1, unknown2 = struct.unpack_from("<HH", blob, name_end)
 
         payload_start = name_end + 4
-        payload_end = payload_start + unknown1
+
+        if unknown2 == 1:
+            payload_size = unknown1 + 65536
+        else:
+            payload_size = unknown1
+
+        payload_end = payload_start + payload_size
 
         if payload_end > page_end:
             raise VDBError(
@@ -717,11 +718,6 @@ class VDB:
 
         payload = bytes(payload)
 
-        if len(payload) > 0xFFFF:
-            raise VDBError(
-                f"VDB payload is too large for uint16 size: {len(payload)}"
-            )
-
         entry = self.get_entry(key)
         record = self.get_record(key)
 
@@ -752,12 +748,12 @@ class VDB:
             + RECORD_NAME_OFFSET
             + len(key.encode("utf-8"))
         )
-
+        unknown2 = get_record_unknown2(key)
         struct.pack_into(
             "<H",
             updated_slot,
             name_end,
-            len(payload),
+            len(payload) - 65536 if unknown2 == 1 else len(payload)
         )
 
         # Clear the old payload and remaining page bytes.
@@ -810,7 +806,7 @@ class VDB:
             page_count = self._slot_page_counts[slot]
 
             for page in range(page_count):
-                start = data_offset + page * page_size
+                start = data_offset + page * page_size - 8
                 end = start + page_size
 
                 if blob[start:end] == bytes(page_size):
@@ -888,6 +884,40 @@ class VDB:
 
         return bytes(entry)
 
+
+    def apply_mode(self, mode: str) -> list[str]:
+        """
+        Remove VDB records according to the selected conversion mode.
+
+        keep_all:
+            Keep every record.
+        keep_biome:
+            Keep only BiomeData records.
+        clear_all:
+            Remove every record.
+
+        ~local_player is handled separately after this method.
+        """
+        if mode not in ("keep_all", "keep_biome", "clear_all"):
+            raise ValueError(f"Invalid VDB mode: {mode!r}")
+
+        if mode == "keep_all":
+            return []
+
+        if mode == "keep_biome":
+            keep = {"BiomeData"}
+        else:
+            keep = set()
+
+        removed = []
+
+        for key in self.keys():
+            if key not in keep:
+                self.delete(key)
+                removed.append(key)
+
+        return removed
+
     def add(
         self,
         key: str,
@@ -924,9 +954,6 @@ class VDB:
 
         payload = bytes(payload)
 
-        if len(payload) > 0xFFFF:
-            raise VDBError("Payload exceeds uint16 size")
-
         page_size = get_page_size_for_key(key)
 
         page_header_size = (
@@ -941,11 +968,55 @@ class VDB:
         empty = self._find_empty_page(page_size)
 
         if empty is None:
-            raise VDBError(
-                "No empty page exists for this record's page size. "
-                "Creating a new slot is disabled because the pointer "
-                "array and page parameters have not been fully verified."
-            )
+            template_path = None
+
+            for slot, path in sorted(self._list_slot_paths()):
+                blob = path.read_bytes()
+
+                if len(blob) < SLOT_HEADER_SIZE:
+                    continue
+
+                slot_page_size = struct.unpack_from(
+                    "<I", blob, SLOT_PAGE_SIZE_OFFSET
+                )[0]
+
+                if slot_page_size == page_size:
+                    template_path = path
+                    break
+
+            if template_path is None:
+                raise VDBError(
+                    f"No template slot found for page size 0x{page_size:X}"
+                )
+
+            new_slot = max(
+                (slot for slot, _ in self._list_slot_paths()),
+                default=-1
+            ) + 1
+
+            new_path = self.directory / f"slt{new_slot}.vdb"
+            template_data = template_path.read_bytes()
+
+            new_path.write_bytes(template_data)
+
+            self._slot_blobs.pop(new_slot, None)
+            self._slot_page_sizes.pop(new_slot, None)
+            self._slot_data_offsets.pop(new_slot, None)
+            self._slot_page_counts.pop(new_slot, None)
+
+            copied_data = new_path.read_bytes()
+            
+            copied_page_size = struct.unpack_from(
+                "<I", new_path.read_bytes(), SLOT_PAGE_SIZE_OFFSET
+            )[0]
+
+            if copied_page_size != page_size:
+                raise VDBError(
+                    f"Cloned slot has invalid page size: "
+                    f"0x{copied_page_size:X}, expected 0x{page_size:X}"
+                )
+
+            empty = (new_slot, 0)
 
         slot, page = empty
 
@@ -953,7 +1024,11 @@ class VDB:
         data_offset = self._slot_data_offsets[slot]
 
         page_start = data_offset + page * page_size - 8
+
         page_data = bytearray(page_size)
+
+        if page == 0:
+            page_data[:8] = blob[page_start:page_start + 8]
 
         # The eight parameter bytes are retained as zero for a new page.
         # Their nonzero values in existing records are not yet understood.
@@ -987,10 +1062,11 @@ class VDB:
         name_end = name_start + len(key_bytes)
 
         page_data[name_start:name_end] = key_bytes
-
-        unknown1 = len(payload)
         unknown2 = get_record_unknown2(key)
-
+        if unknown2 == 1:
+            unknown1 = len(payload) - 65536
+        else:
+            unknown1 = len(payload)
         struct.pack_into(
             "<HH",
             page_data,
@@ -1007,9 +1083,12 @@ class VDB:
 
         updated_slot = bytearray(blob)
 
+        write_start = page_start + (8 if page == 0 else 0)
+        write_data = page_data[8:] if page == 0 else page_data
+
         updated_slot[
-            page_start:page_start + page_size
-        ] = page_data
+            write_start:write_start + len(write_data)
+        ] = write_data
 
         new_entry = self._make_index_entry(
             key,
@@ -1068,6 +1147,14 @@ class VDB:
         page_start = data_offset + entry.page * page_size - 8
         page_end = page_start + page_size
 
+        updated_slot = bytearray(blob)
+
+        clear_start = page_start + (8 if entry.page == 0 else 0)
+
+        updated_slot[clear_start:page_end] = bytes(
+            page_end - clear_start
+        )
+
         raw_entries = self._get_raw_entries()
         new_entries = []
 
@@ -1100,7 +1187,6 @@ class VDB:
 
         new_index = self._build_index(new_entries)
 
-        # Remove index reference first.
         self._atomic_replace(
             self.index_path,
             new_index,
@@ -1108,10 +1194,6 @@ class VDB:
 
         self._index_blob = new_index
         self._parse_index()
-
-        # Clear the page only after the index no longer references it.
-        updated_slot = bytearray(blob)
-        updated_slot[page_start:page_end] = bytes(page_size)
 
         slot_path = self.directory / f"slt{entry.slot}.vdb"
 
@@ -1121,6 +1203,7 @@ class VDB:
         )
 
         self._slot_blobs[entry.slot] = bytes(updated_slot)
+
 
     # ------------------------------------------------------------------
     # NBT helpers
@@ -1281,17 +1364,6 @@ def import_leveldb_records(
             if warning:
                 warning(
                     f"Skipped VDB key too long for index: {key!r}"
-                )
-
-            return
-            
-        if len(value) > 0xFFFF:
-            stats.skipped_oversized_values += 1
-
-            if warning:
-                warning(
-                    f"Skipped oversized VDB record: "
-                    f"{key!r} ({len(value)} bytes, maximum 65535)"
                 )
 
             return

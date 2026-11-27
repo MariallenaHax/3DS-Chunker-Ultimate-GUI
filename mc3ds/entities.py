@@ -139,6 +139,69 @@ _BUILTIN: dict[str, dict[str, Any]] = {
     "minecraft:furnace_minecart": {"type_id": 0x80055, "save_name": "MinecartFurnace"},
 }
 
+def convert_attributes(source_attributes, health=None) -> list:
+    attribute_names = {
+        "generic.maxHealth": "minecraft:health",
+        "minecraft:generic.max_health": "minecraft:health",
+
+        "generic.movementSpeed": "minecraft:movement",
+        "generic.movement_speed": "minecraft:movement",
+        "minecraft:generic.movement_speed": "minecraft:movement",
+
+        "generic.knockbackResistance": "minecraft:knockback_resistance",
+        "generic.knockback_resistance": "minecraft:knockback_resistance",
+        "minecraft:generic.knockback_resistance": "minecraft:knockback_resistance",
+
+        "generic.attackDamage": "minecraft:attack_damage",
+        "generic.attack_damage": "minecraft:attack_damage",
+        "minecraft:generic.attack_damage": "minecraft:attack_damage",
+
+        "generic.armor": "minecraft:armor",
+        "minecraft:generic.armor": "minecraft:armor",
+
+        "generic.luck": "minecraft:luck",
+        "minecraft:generic.luck": "minecraft:luck",
+    }
+
+    converted = {}
+    max_health = None
+
+    for attr in source_attributes or []:
+        name = str(attr.get("Name", ""))
+        target_name = attribute_names.get(name)
+
+        if target_name is None:
+            continue
+
+        base = attr.get("Base", attr.get("Current"))
+        if base is None:
+            continue
+
+        base = float(base)
+        maximum = float(attr.get("Max", base))
+
+        converted[target_name] = {
+            "Base": base,
+            "Current": base,
+            "Max": maximum,
+            "Name": target_name,
+        }
+
+        if target_name == "minecraft:health":
+            max_health = maximum
+
+    if health is not None:
+        if max_health is None:
+            max_health = float(health)
+
+        converted["minecraft:health"] = {
+            "Name": "minecraft:health",
+            "Base": max_health,
+            "Current": float(health),
+            "Max": max_health,
+        }
+
+    return list(converted.values())
 
 class EntityMapper:
     def __init__(self) -> None:
@@ -269,70 +332,12 @@ def convert_entity(
 
     # --- Mob / animal extras ---
     source_attributes = entity.get("Attributes") or []
-    healths = float(0)
-    attribute_names = {
-        "generic.maxHealth": "minecraft:health",
-        "minecraft:generic.max_health": "minecraft:health",
-
-        "generic.movementSpeed": "minecraft:movement",
-        "generic.movement_speed": "minecraft:movement",
-        "minecraft:generic.movement_speed": "minecraft:movement",
-
-        "generic.knockbackResistance": "minecraft:knockback_resistance",
-        "generic.knockback_resistance": "minecraft:knockback_resistance",
-        "minecraft:generic.knockback_resistance": "minecraft:knockback_resistance",
-
-        "generic.attackDamage": "minecraft:attack_damage",
-        "generic.attack_damage": "minecraft:attack_damage",
-        "minecraft:generic.attack_damage": "minecraft:attack_damage",
-
-        "generic.armor": "minecraft:armor",
-        "minecraft:generic.armor": "minecraft:armor",
-
-        "generic.luck": "minecraft:luck",
-        "minecraft:generic.luck": "minecraft:luck",
-    }
-
-    converted_attributes = {}
-
-    for attr in source_attributes:
-        if not isinstance(attr, dict):
-            continue
-
-        source_name = attr.get("Name")
-        target_name = attribute_names.get(source_name)
-
-        if target_name is None:
-            continue
-
-        base = attr.get("Base")
-        if base is None:
-            base = attr.get("Current")
-
-        if base is None:
-            continue
-        if source_name == "generic.maxHealth" or source_name == "minecraft:generic.max_health":
-            healths = float(attr.get("Max", base))
-        converted_attributes[target_name] = {
-            "Base": float(base),
-            "Current": float(base),
-            "Max": float(attr.get("Max", base)),
-            "Name": target_name,
-        }
-
     health = entity.get("Health")
 
-    if health is not None:
-        health = float(health)
-        converted_attributes["minecraft:health"] = {
-            "Name": "minecraft:health",
-            "Base": healths,
-            "Current": health,
-            "Max": healths,
-        }
+    converted_attributes = convert_attributes(source_attributes,health=health)
 
     if converted_attributes:
-        result["Attributes"] = list(converted_attributes.values())
+        result["Attributes"] = converted_attributes
 
     if "HurtTime" in entity:
         result["HurtTime"] = int(entity["HurtTime"])

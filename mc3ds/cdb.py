@@ -300,6 +300,7 @@ _FORCE_INT = frozenset(
         "EntityId",
         "SuccessCount",
         "LPCommandMode",
+        "map_name_index"
     }
 )
 _FORCE_SHORT = frozenset(

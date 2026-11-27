@@ -35,6 +35,8 @@ from .java import (
 )
 from .nbt_java import as_dict
 from .progress import Progress
+from .vdb import VDB
+import nbtlib
 
 BLOCKS_JSON = Path(__file__).parent / "data" / "blocks.json"
 AIR_BLOCKS = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air"}
@@ -86,6 +88,63 @@ ITEM_FRAME_FACING = {
     2: 3,  # North
 }
 
+MAP_PALETTE = {
+    0: 0000000,
+    1: 8368696,
+    2: 16247203,
+    3: 13092807,
+    4: 16711680,
+    5: 10526975,
+    6: 10987431,
+    7: 31744,
+    8: 16777215,
+    9: 10791096,
+   10: 9923917,
+   11: 7368816,
+   12: 4210943,
+   13: 9402184,
+   14: 16776437,
+   15: 14188339,
+   16: 11685080,
+   17: 6724056,
+   18: 15066419,
+   19: 8375321,
+   20: 15892389,
+   21: 5000268,
+   22: 10066329,
+   23: 5013401,
+   24: 8339378,
+   25: 3361970,
+   26: 6704179,
+   27: 6717235,
+   28: 10040115,
+   29: 1644825,
+   30: 16445005,
+   31: 6085589,
+   32: 4882687,
+   33: 55610,
+   34: 8476209,
+   35: 7340544,
+   36: 13742497,
+   37: 10441252,
+   38: 9787244,
+   39: 7367818,
+   40: 12223780,
+   41: 6780213,
+   42: 10505550,
+   43: 3746083,
+   44: 8874850,
+   45: 5725276,
+   46: 8014168,
+   47: 4996700,
+   48: 4993571,
+   49: 5001770,
+   50: 9321518,
+   51: 2430480,
+}
+
+MAP_SHADE_MULTIPLIERS = (180, 220, 255, 135)
+
 POTTED_BLOCKS = {
     "minecraft:potted_oak_sapling": "6:0",
     "minecraft:potted_spruce_sapling": "6:1",
@@ -129,6 +188,196 @@ def item_frame_metadata(entity: dict) -> int | None:
             meta |= 0x4
 
     return meta
+
+def convert_map_colors(
+    colors: bytes,
+    palette: dict[int, int],
+) -> bytes:
+    if len(colors) != 128 * 128:
+        raise ValueError(
+            f"Invalid map colors size: {len(colors)}"
+        )
+
+    result = bytearray(128 * 128 * 4)
+
+    for i, raw_color in enumerate(colors):
+        color_id = raw_color & 0xFF
+
+        base_id = color_id >> 2
+
+        shade = color_id & 3
+
+        offset = i * 4
+
+        if base_id == 0:
+            result[offset:offset + 4] = bytes((0, 0, 0, 0))
+            continue
+
+        rgb = palette.get(base_id)
+
+        if rgb is None:
+            result[offset:offset + 4] = bytes((0, 0, 0, 0))
+            continue
+
+        multiplier = MAP_SHADE_MULTIPLIERS[shade]
+
+        r = ((rgb >> 16) & 0xFF) * multiplier // 255
+        g = ((rgb >> 8) & 0xFF) * multiplier // 255
+        b = (rgb & 0xFF) * multiplier // 255
+
+        result[offset:offset + 4] = bytes((r, g, b, 255))
+
+    return bytes(result)
+
+def read_map(path: Path):
+    path = Path(path)
+
+    try:
+        data = nbtlib.load(path)
+    except Exception as exc:
+        raise ValueError(
+            f"Could not read Java map {path}: {exc}"
+        ) from exc
+
+    return data
+
+def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
+    root = read_map(map_path)
+    data = root["data"]
+
+    map_id = int(map_path.stem.removeprefix("map_"))
+    colors = bytes(data["colors"])
+
+    rgba = convert_map_colors(colors, palette)
+
+    map_nbt = nbtlib.Compound({
+        "mapId": nbtlib.Long(map_id),
+        "parentMapId": nbtlib.Long(
+            int(data.get("parentMapId", -1))
+        ),
+        "dimension": nbtlib.Byte(
+            int(data.get("dimension", 0))
+        ),
+        "xCenter": nbtlib.Int(
+            int(data["xCenter"])
+        ),
+        "zCenter": nbtlib.Int(
+            int(data["zCenter"])
+        ),
+        "scale": nbtlib.Byte(
+            int(data["scale"])
+        ),
+        "width": nbtlib.Short(128),
+        "height": nbtlib.Short(128),
+        "unlimitedTracking": nbtlib.Byte(
+            int(data.get("unlimitedTracking", 0))
+        ),
+        "colors": nbtlib.ByteArray(list(rgba)),
+        "fullyExplored": nbtlib.Byte(
+            int(data.get("fullyExplored", 0))
+        ),
+        "decorations": nbtlib.List[nbtlib.Compound]([]),
+    })
+
+    key = f"map_{map_id}"
+    vdb.put_nbt(key, map_nbt)
+
+    return key
+
+def import_maps(data_dir: Path, vdb_path: Path, palette: dict[int, int]):
+    data_dir = Path(data_dir)
+    vdb = VDB(Path(vdb_path))
+
+    map_files = sorted(data_dir.glob("map_*.dat"))
+    results = []
+
+    for map_path in map_files:
+        key = import_map(map_path, vdb, palette)
+
+        if key is not None:
+            results.append(key)
+
+    return results
+
+def convert_item_list(
+    items,
+    item_mapper: ItemMapper,
+    preserve_slot: bool = True,
+) -> list:
+    """Convert Java item list into MC3DS item list."""
+    result = []
+
+    for stack in items or []:
+        if not isinstance(stack, dict):
+            continue
+
+        slot = None
+        if preserve_slot and "Slot" in stack:
+            slot = int(stack["Slot"])
+
+        converted = item_mapper.convert_stack(
+            stack,
+            slot=slot,
+        )
+
+        if converted is not None:
+            result.append(converted)
+
+    return result
+
+def import_local_player(
+    player,
+    vdb: VDB,
+    item_mapper: ItemMapper,
+) -> None:
+    """
+    Import Java level.dat Data.Player into MC3DS ~local_player.
+    """
+    if player is None:
+        if "~local_player" in vdb:
+            vdb.delete("~local_player")
+        return
+
+    result = nbtlib.Compound()
+
+    if "Inventory" in player:
+        inventory = []
+        offhand = []
+
+        for stack in player["Inventory"]:
+            if not isinstance(stack, dict):
+                continue
+
+            slot = int(stack.get("Slot", -1))
+
+            if slot == -106:
+                converted = item_mapper.convert_stack(stack)
+                if converted:
+                    offhand.append(converted)
+            else:
+                converted = item_mapper.convert_stack(
+                    stack,
+                    slot=slot if slot >= 0 else None,
+                )
+                if converted:
+                    inventory.append(converted)
+
+        result["Inventory"] = inventory
+        result["Offhand"] = offhand
+
+    if "EnderItems" in player:
+        result["EnderChestInventory"] = convert_item_list(
+            player["EnderItems"],
+            item_mapper,
+        )
+
+    if "Attributes" in player or "Health" in player:
+        result["Attributes"] = convert_attributes(
+            player.get("Attributes", []),
+            health=player.get("Health"),
+        )
+
+    vdb.put_nbt("~local_player", result)
 
 class ConversionError(Exception):
     pass
@@ -995,6 +1244,7 @@ def convert(
     start_chunk: tuple[int, int] = (0, 0),
     progress: Progress | None = None,
     blocks_json: Path = BLOCKS_JSON,
+    vdb_mode: str = "keep_all",
 ) -> ConversionResult:
     """
     Converts a Java world (or a single region folder) by inserting it into a
@@ -1051,6 +1301,18 @@ def convert(
     progress.status(f"Copying MC3DS world {template_world.name}...")
     shutil.copytree(template_world, world_out)
     try:
+        vdb = VDB(world_out / "db" / "vdb")
+        removed_keys = vdb.apply_mode(vdb_mode)
+
+        if removed_keys:
+            progress.status(
+                f"Removed {len(removed_keys)} VDB records ({vdb_mode})"
+            )
+
+        level = read_level_data(java_path)
+
+        if level is not None:
+            import_local_player(level["player"], vdb, item_mapper)
         for dimension, region_directory in sorted(region_directories.items()):
             progress.status(
                 f"Converting {DIMENSION_NAMES.get(dimension, dimension)} from {region_directory}"
@@ -1070,10 +1332,10 @@ def convert(
             result.chunks += inserted.chunks
             result.errors += inserted.errors
             result.dimensions.append(dimension)
+        map_result = import_maps(java_path / "data",world_out / "db" / "vdb",MAP_PALETTE)
     except BaseException:
         shutil.rmtree(world_out, ignore_errors=True)
         raise
-
     result.unmapped = mapper.unmapped
     result.substituted = getattr(mapper, "substituted", Counter())
     result.unmapped_items = Counter(item_mapper.unmapped)
