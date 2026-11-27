@@ -332,7 +332,7 @@ _FORCE_LONG = frozenset({
     "UniqueID",
     "TargetID",
     "LeasherID",
-    "OwnerNew",
+    "OwnerNew"
 })
 _FORCE_BYTE = frozenset(
     {

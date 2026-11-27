@@ -529,10 +529,11 @@ class ItemMapper:
             converted_tag = self._convert_tag(tag)
             if "map" in tag:
                 java_map_id = int(tag["map"])
-                map_id = -(java_map_id + 1)
                 converted_tag.pop("map", None)
-                converted_tag["map_uuid"] = str(map_id)
-                converted_tag["map_name_index"] = map_id
+                map_uuid = -(java_map_id + 4294967268)
+                map_name_index = java_map_id + 1
+                converted_tag["map_uuid"] = str(map_uuid)
+                converted_tag["map_name_index"] = map_name_index
             out["tag"] = converted_tag
         return out
 

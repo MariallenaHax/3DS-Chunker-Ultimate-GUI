@@ -241,7 +241,7 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
     data = root["data"]
 
     java_map_id = int(map_path.stem.removeprefix("map_"))
-    map_id = -(java_map_id + 1)
+    map_id = -(java_map_id + 4294967268)
     colors = bytes(data["colors"])
 
     rgba = convert_map_colors(colors, palette)
