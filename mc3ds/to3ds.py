@@ -181,12 +181,7 @@ def item_frame_metadata(entity: dict) -> int | None:
         return None
 
     meta = direction
-
-    item = entity.get("Item") or entity.get("item")
-    if isinstance(item, dict):
-        if item.get("id") in ("minecraft:filled_map", "minecraft:map"):
-            meta |= 0x4
-
+    
     return meta
 
 def convert_map_colors(
