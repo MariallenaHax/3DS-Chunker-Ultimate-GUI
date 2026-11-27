@@ -181,7 +181,7 @@ def item_frame_metadata(entity: dict) -> int | None:
         return None
 
     meta = direction
-    
+
     return meta
 
 def convert_map_colors(
@@ -240,7 +240,7 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
     root = read_map(map_path)
     data = root["data"]
 
-    map_id = int(map_path.stem.removeprefix("map_"))
+    map_id = int(map_path.stem.removeprefix("map_")) + 1
     colors = bytes(data["colors"])
 
     rgba = convert_map_colors(colors, palette)
@@ -248,7 +248,9 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
     map_nbt = nbtlib.Compound({
         "mapId": nbtlib.Long(map_id),
         "parentMapId": nbtlib.Long(
-            int(data.get("parentMapId", -1))
+            int(data.get("parentMapId", -1)) + 1
+            if int(data.get("parentMapId", -1)) >= 0
+            else -1
         ),
         "dimension": nbtlib.Byte(
             int(data.get("dimension", 0))

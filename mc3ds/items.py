@@ -14,6 +14,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+import random
 
 DATA = Path(__file__).resolve().parent / "data"
 
@@ -421,9 +422,32 @@ def get_potion_type(stack: dict) -> str | None:
         if potion is not None:
             return str(_nbt_value(potion))
 
+class MapNameIndexAllocator:
+    def __init__(self):
+        self._indices: dict[str, int] = {}
+        self._used_indices: set[int] = set()
+
+    def get(self, map_uuid: str) -> int:
+        map_uuid = str(map_uuid)
+
+        if map_uuid in self._indices:
+            return self._indices[map_uuid]
+
+        while True:
+            index = random.randint(1, 0x7FFFFFFF)
+
+            if index not in self._used_indices:
+                break
+
+        self._indices[map_uuid] = index
+        self._used_indices.add(index)
+
+        return index
+
 class ItemMapper:
     def __init__(self,blocks_json: Path | None = None,items_json: Path | None = None,) -> None:
         self._name_to_id: dict[str, tuple[int, int]] = {}
+        self.map_index_allocator = MapNameIndexAllocator()
 
         for name, val in _FALLBACK_ITEMS.items():
             if isinstance(val, tuple):
@@ -528,10 +552,10 @@ class ItemMapper:
         if isinstance(tag, dict) and tag:
             converted_tag = self._convert_tag(tag)
             if "map" in tag:
-                map_id = int(tag["map"])
+                map_id = int(tag["map"]) + 1
                 converted_tag.pop("map", None)
                 converted_tag["map_uuid"] = str(map_id)
-                converted_tag["map_name_index"] = map_id
+                converted_tag["map_name_index"] = self.map_index_allocator.get(map_id)
             out["tag"] = converted_tag
         return out
 
