@@ -259,7 +259,7 @@ def import_map(map_path: Path,vdb: VDB,palette: dict[int, int]):
             int(data["zCenter"])
         ),
         "scale": nbtlib.Byte(
-            int(data["scale"])
+            int(4)
         ),
         "width": nbtlib.Short(128),
         "height": nbtlib.Short(128),
