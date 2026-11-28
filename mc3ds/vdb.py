@@ -1460,13 +1460,16 @@ def export_vdb_records(
                     byteorder="little",
                 )
 
-                if "scale" in map_nbt:
-                    map_nbt["scale"] = nbtlib.Byte(4)
-
-                else:
+                if "scale" not in map_nbt:
                     raise VDBError(
                         f"Map record {key!r} has no scale field"
                     )
+
+                scale = int(map_nbt["scale"])
+                parent_map_id = int(map_nbt.get("parentMapId", -1))
+
+                if scale in (1, 2, 3) and parent_map_id == -1:
+                    map_nbt["scale"] = nbtlib.Byte(4)
 
                 buffer = io.BytesIO()
                 map_nbt.write(
