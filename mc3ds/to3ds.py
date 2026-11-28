@@ -319,6 +319,74 @@ def convert_item_list(
 
     return result
 
+def to_nbt_tag(value):
+    if isinstance(value, nbtlib.Base):
+        return value
+
+    if isinstance(value, dict):
+        return nbtlib.Compound({
+            str(k): to_nbt_tag(v)
+            for k, v in value.items()
+        })
+
+    if isinstance(value, (list, tuple)):
+        converted = [to_nbt_tag(v) for v in value]
+
+        if not converted:
+            return nbtlib.List[nbtlib.Compound]([])
+
+        tag_type = type(converted[0])
+        if not all(isinstance(v, tag_type) for v in converted):
+            raise TypeError("NBT List contains mixed tag types")
+
+        return nbtlib.List[tag_type](converted)
+
+    if isinstance(value, bool):
+        return nbtlib.Byte(int(value))
+
+    if isinstance(value, int):
+        if -128 <= value <= 127:
+            return nbtlib.Byte(value)
+        if -32768 <= value <= 32767:
+            return nbtlib.Short(value)
+        if -(2**31) <= value < 2**31:
+            return nbtlib.Int(value)
+        return nbtlib.Long(value)
+
+    if isinstance(value, float):
+        return nbtlib.Double(value)
+
+    if isinstance(value, str):
+        return nbtlib.String(value)
+
+    if value is None:
+        return nbtlib.String("")
+
+    raise TypeError(f"Unsupported NBT value: {type(value).__name__}")
+
+def fix_item_tag_types(item):
+    if item is None:
+        return None
+
+    item = dict(item)
+
+    if "Damage" in item:
+        item["Damage"] = nbtlib.Short(int(item["Damage"]))
+
+    if "id" in item:
+        item["id"] = nbtlib.Short(int(item["id"]))
+
+    return item
+
+def update_attribute(attributes, name, field, value):
+    if value is None:
+        return
+
+    for attribute in attributes:
+        if attribute.get("Name") == name:
+            attribute[field] = nbtlib.Float(float(value))
+            return
+
 def import_local_player(
     player,
     vdb: VDB,
@@ -326,17 +394,681 @@ def import_local_player(
 ) -> None:
     """
     Import Java level.dat Data.Player into MC3DS ~local_player.
+    Preserve unmodified Player NBT fields.
     """
     if player is None:
         if "~local_player" in vdb:
             vdb.delete("~local_player")
         return
 
-    result = nbtlib.Compound()
+    result = nbtlib.Compound({
+        "id": nbtlib.Int(319),
+
+        "Pos": nbtlib.List[nbtlib.Float]([
+            nbtlib.Float(0.0),
+            nbtlib.Float(0.0),
+            nbtlib.Float(0.0),
+        ]),
+        "Motion": nbtlib.List[nbtlib.Float]([
+            nbtlib.Float(0.0),
+            nbtlib.Float(0.0),
+            nbtlib.Float(0.0),
+        ]),
+        "Rotation": nbtlib.List[nbtlib.Float]([
+            nbtlib.Float(0.0),
+            nbtlib.Float(0.0),
+        ]),
+        "Armor": nbtlib.List[nbtlib.Compound]([
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0),
+                "id": nbtlib.Short(0),
+                "Slot": nbtlib.Byte(0),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0),
+                "id": nbtlib.Short(0),
+                "Slot": nbtlib.Byte(1),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0),
+                "id": nbtlib.Short(0),
+                "Slot": nbtlib.Byte(2),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0),
+                "id": nbtlib.Short(0),
+                "Slot": nbtlib.Byte(3),
+            }),
+        ]),
+        "Inventory": nbtlib.List[nbtlib.Compound]([
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(9.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(0),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(10.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(1),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(11.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(2),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(12.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(3),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(13.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(4),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(14.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(5),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(15.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(6),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(16.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(7),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(-1),
+                "Damage": nbtlib.Short(17.0),
+                "id": nbtlib.Short(255.0),
+                "Slot": nbtlib.Byte(8),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(9),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(10),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(11),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(12),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(13),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(14),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(15),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(16),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(17),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(18),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(19),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(20),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(21),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(22),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(23),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(24),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(25),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(26),
+            }),
+                        nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(27),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(28),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(29),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(30),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(31),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(32),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(33),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(34),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(35),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(36),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(37),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(38),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(39),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(40),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(41),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(42),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(43),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(44),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(45),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(46),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(47),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(48),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(49),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(50),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(51),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(52),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(53),
+            })
+        ]),
+        "Offhand": nbtlib.List[nbtlib.Compound]([
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+            })]),
+        "EnderChestInventory": nbtlib.List[nbtlib.Compound]([
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(0),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(1),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(2),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(3),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(4),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(5),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(6),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(7),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(8),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(9),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(10),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(11),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(12),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(13),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(14),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(15),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(16),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(17),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(18),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(19),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(20),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(21),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(22),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(23),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(24),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(25),
+            }),
+            nbtlib.Compound({
+                "Count": nbtlib.Byte(0),
+                "Damage": nbtlib.Short(0.0),
+                "id": nbtlib.Short(0.0),
+                "Slot": nbtlib.Byte(26),
+            })
+        ]),
+
+        "Attributes": nbtlib.List[nbtlib.Compound]([
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:health"),
+                "Base": nbtlib.Float(20.0),
+                "Current": nbtlib.Float(20.0),
+                "Max": nbtlib.Float(20.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:luck"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(1024.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.exhaustion"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(4.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:movement"),
+                "Base": nbtlib.Float(0.1),
+                "Current": nbtlib.Float(0.1),
+                "Max": nbtlib.Float(3.402823E+38),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:absorption"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(16.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:knockback_resistance"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(1.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:fall_damage"),
+                "Base": nbtlib.Float(1.0),
+                "Current": nbtlib.Float(1.0),
+                "Max": nbtlib.Float(3.402823E+38),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:follow_range"),
+                "Base": nbtlib.Float(16.0),
+                "Current": nbtlib.Float(16.0),
+                "Max": nbtlib.Float(2048.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.attack_damage"),
+                "Base": nbtlib.Float(1.0),
+                "Current": nbtlib.Float(1.0),
+                "Max": nbtlib.Float(1.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.hunger"),
+                "Base": nbtlib.Float(20.0),
+                "Current": nbtlib.Float(20.0),
+                "Max": nbtlib.Float(20.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.saturation"),
+                "Base": nbtlib.Float(20.0),
+                "Current": nbtlib.Float(20.0),
+                "Max": nbtlib.Float(20.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.level"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(24791.0),
+            }),
+            nbtlib.Compound({
+                "Name": nbtlib.String("minecraft:player.experience"),
+                "Base": nbtlib.Float(0.0),
+                "Current": nbtlib.Float(0.0),
+                "Max": nbtlib.Float(1.0),
+            }),
+        ]),
+        "Air": nbtlib.Short(400.0),
+        "AttackTime": nbtlib.Short(0.0),
+        "BedPositionX": nbtlib.Int(0),
+        "BedPositionY": nbtlib.Int(0),
+        "BedPositionZ": nbtlib.Int(0),
+        "BoundX": nbtlib.Int(0),
+        "BoundY": nbtlib.Int(0),
+        "BoundZ": nbtlib.Int(0),
+        "Chested": nbtlib.Byte(0),
+        "Color": nbtlib.Byte(0),
+        "DeathTime": nbtlib.Short(0.0),
+        "Fire": nbtlib.Short(0.0),
+        "hasBoundOrigin": nbtlib.Byte(0),
+        "HurtTime": nbtlib.Short(0.0),
+        "Invulnerable": nbtlib.Byte(0),
+        "IsAngry": nbtlib.Byte(0),
+        "FallFlying": nbtlib.Byte(0),
+        "OnGround": nbtlib.Byte(0),
+        "Sleeping": nbtlib.Byte(0),
+        "IsGliding": nbtlib.Byte(0),
+
+        "DeathTime": nbtlib.Short(0),
+        "Fire": nbtlib.Short(-20),
+        "HurtTime": nbtlib.Short(0),
+        "SleepTimer": nbtlib.Short(0),
+
+        "FallDistance": nbtlib.Float(0.0),
+
+        "DimensionId": nbtlib.Int(0),
+        "PlayerGameMode": nbtlib.Int(1),
+        "PlayerLevel": nbtlib.Int(0),
+        "PlayerLevelProgress": nbtlib.Float(0.0),
+        "PortalCooldown": nbtlib.Int(0),
+        "SelectedInventorySlot": nbtlib.Int(0),
+
+        "SpawnX": nbtlib.Int(0),
+        "SpawnY": nbtlib.Int(-1),
+        "SpawnZ": nbtlib.Int(0),
+        "SpawnForced": nbtlib.Byte(0),
+
+        "MapIndex": nbtlib.Int(1),
+        "EnchantmentSeed": nbtlib.Int(0),
+    })
 
     if "Inventory" in player:
-        inventory = []
-        offhand = []
+        inventory = list(result["Inventory"])
+        offhand = list(result["Offhand"])
+        armor = list(result["Armor"])
 
         for stack in player["Inventory"]:
             if not isinstance(stack, dict):
@@ -344,32 +1076,181 @@ def import_local_player(
 
             slot = int(stack.get("Slot", -1))
 
+            # Ignore empty Java stacks.
+            if not stack or int(stack.get("Count", 0)) <= 0:
+                continue
+
             if slot == -106:
                 converted = item_mapper.convert_stack(stack)
+
                 if converted:
-                    offhand.append(converted)
-            else:
+                    offhand[0] = to_nbt_tag(
+                        fix_item_tag_types(converted)
+                    )
+
+                continue
+
+            if 100 <= slot <= 103:
+                armor_slot = 103 - slot
+
                 converted = item_mapper.convert_stack(
                     stack,
-                    slot=slot if slot >= 0 else None,
+                    slot=armor_slot,
                 )
-                if converted:
-                    inventory.append(converted)
 
-        result["Inventory"] = inventory
-        result["Offhand"] = offhand
+                if converted:
+                    armor[armor_slot] = to_nbt_tag(
+                        fix_item_tag_types(converted)
+                    )
+
+                continue
+
+            target_slot = slot + 9
+
+            if not 9 <= target_slot < len(inventory):
+                continue
+
+            converted = item_mapper.convert_stack(
+                stack,
+                slot=target_slot,
+            )
+
+            if converted:
+                inventory[target_slot] = to_nbt_tag(
+                    fix_item_tag_types(converted)
+                )
+
+        result["Inventory"] = nbtlib.List[nbtlib.Compound](inventory)
+        result["Offhand"] = nbtlib.List[nbtlib.Compound](offhand)
+        result["Armor"] = nbtlib.List[nbtlib.Compound](armor)
 
     if "EnderItems" in player:
-        result["EnderChestInventory"] = convert_item_list(
-            player["EnderItems"],
-            item_mapper,
+        ender_inventory = list(result["EnderChestInventory"])
+
+        for stack in player["EnderItems"]:
+            if not isinstance(stack, dict):
+                continue
+
+            # Ignore empty Java slots.
+            if not stack or int(stack.get("Count", 0)) <= 0:
+                continue
+
+            slot = int(stack.get("Slot", -1))
+
+            if not 0 <= slot < len(ender_inventory):
+                continue
+
+            converted = item_mapper.convert_stack(
+                stack,
+                slot=slot,
+            )
+
+            if converted:
+                ender_inventory[slot] = to_nbt_tag(
+                    fix_item_tag_types(converted)
+                )
+
+        result["EnderChestInventory"] = nbtlib.List[nbtlib.Compound](
+            ender_inventory
         )
 
-    if "Attributes" in player or "Health" in player:
-        result["Attributes"] = convert_attributes(
-            player.get("Attributes", []),
-            health=player.get("Health"),
+        result.pop("EnderItems", None)
+
+    attributes = result["Attributes"]
+
+    attribute_mapping = {
+        "generic.max_health": "minecraft:health",
+        "minecraft:generic.max_health": "minecraft:health",
+        "generic.movement_speed": "minecraft:movement",
+        "minecraft:generic.movement_speed": "minecraft:movement",
+        "generic.knockback_resistance": "minecraft:knockback_resistance",
+        "minecraft:generic.knockback_resistance": "minecraft:knockback_resistance",
+        "generic.follow_range": "minecraft:follow_range",
+        "minecraft:generic.follow_range": "minecraft:follow_range",
+        "generic.attack_damage": "minecraft:player.attack_damage",
+        "minecraft:generic.attack_damage": "minecraft:player.attack_damage",
+    }
+
+    for java_attribute in player.get("Attributes", []):
+        if not isinstance(java_attribute, dict):
+            continue
+
+        java_name = java_attribute.get("Name")
+        mc3ds_name = attribute_mapping.get(java_name)
+
+        if mc3ds_name is None:
+            continue
+
+        update_attribute(
+            attributes,
+            mc3ds_name,
+            "Base",
+            java_attribute.get("Base"),
         )
+
+    player_attribute_mapping = {
+        "Health": "minecraft:health",
+        "AbsorptionAmount": "minecraft:absorption",
+        "XpTotal": "minecraft:player.experience",
+        "XpLevel": "minecraft:player.level",
+        "foodExhaustionLevel": "minecraft:player.exhaustion",
+        "foodSaturationLevel": "minecraft:player.saturation",
+        "foodLevel": "minecraft:player.hunger",
+    }
+
+    for java_key, mc3ds_name in player_attribute_mapping.items():
+        update_attribute(
+            attributes,
+            mc3ds_name,
+            "Current",
+            player.get(java_key),
+        )
+
+    result["Attributes"] = attributes
+
+    if "Dimension" in player:
+        result["DimensionId"] = nbtlib.Int(
+            int(player["Dimension"])
+        )
+
+    if "SelectedItemSlot" in player:
+        result["SelectedInventorySlot"] = nbtlib.Int(
+            int(player["SelectedItemSlot"])
+        )
+
+    if "playerGameType" in player:
+        result["PlayerGameMode"] = nbtlib.Int(
+            int(player["playerGameType"])
+        )
+
+    if "Pos" in player:
+        pos = player["Pos"]
+
+        if len(pos) >= 3:
+            result["Pos"] = nbtlib.List[nbtlib.Float]([
+                nbtlib.Float(float(pos[0])),
+                nbtlib.Float(float(pos[1])),
+                nbtlib.Float(float(pos[2])),
+            ])
+
+    if "Motion" in player:
+        motion = player["Motion"]
+
+        if len(motion) >= 3:
+            result["Motion"] = nbtlib.List[nbtlib.Float]([
+                nbtlib.Float(float(motion[0])),
+                nbtlib.Float(float(motion[1])),
+                nbtlib.Float(float(motion[2])),
+            ])
+
+    if "Rotation" in player:
+        rotation = player["Rotation"]
+
+        if len(rotation) >= 2:
+            result["Rotation"] = nbtlib.List[nbtlib.Float]([
+                nbtlib.Float(float(rotation[0])),
+                nbtlib.Float(float(rotation[1])),
+            ])
 
     vdb.put_nbt("~local_player", result)
 

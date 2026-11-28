@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .items import ItemMapper, sign_line_to_plain
+import nbtlib
 
 DATA = Path(__file__).resolve().parent / "data"
 
@@ -139,7 +140,7 @@ _BUILTIN: dict[str, dict[str, Any]] = {
     "minecraft:furnace_minecart": {"type_id": 0x80055, "save_name": "MinecartFurnace"},
 }
 
-def convert_attributes(source_attributes, health=None) -> list:
+def convert_attributes(source_attributes, health=None):
     attribute_names = {
         "generic.maxHealth": "minecraft:health",
         "minecraft:generic.max_health": "minecraft:health",
@@ -180,12 +181,12 @@ def convert_attributes(source_attributes, health=None) -> list:
         base = float(base)
         maximum = float(attr.get("Max", base))
 
-        converted[target_name] = {
-            "Base": base,
-            "Current": base,
-            "Max": maximum,
-            "Name": target_name,
-        }
+        converted[target_name] = nbtlib.Compound({
+            "Base": nbtlib.Float(base),
+            "Current": nbtlib.Float(base),
+            "Max": nbtlib.Float(maximum),
+            "Name": nbtlib.String(target_name),
+        })
 
         if target_name == "minecraft:health":
             max_health = maximum
@@ -194,14 +195,14 @@ def convert_attributes(source_attributes, health=None) -> list:
         if max_health is None:
             max_health = float(health)
 
-        converted["minecraft:health"] = {
-            "Name": "minecraft:health",
-            "Base": max_health,
-            "Current": float(health),
-            "Max": max_health,
-        }
+        converted["minecraft:health"] = nbtlib.Compound({
+            "Name": nbtlib.String("minecraft:health"),
+            "Base": nbtlib.Float(max_health),
+            "Current": nbtlib.Float(float(health)),
+            "Max": nbtlib.Float(max_health),
+        })
 
-    return list(converted.values())
+    return nbtlib.List[nbtlib.Compound](list(converted.values()))
 
 class EntityMapper:
     def __init__(self) -> None:
