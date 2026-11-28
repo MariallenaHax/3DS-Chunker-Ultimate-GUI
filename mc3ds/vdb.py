@@ -1441,6 +1441,8 @@ def export_vdb_records(
 ) -> TransferStats:
     """Export VDB records into an open PE LevelDB database."""
 
+    import nbtlib
+
     skipped = set(skip_keys)
     stats = TransferStats()
 
@@ -1448,9 +1450,39 @@ def export_vdb_records(
         if key in skipped:
             continue
 
+        payload = vdb.get(key)
+
+        # Set map scale to 4 before exporting to PE.
+        if key.startswith("map_"):
+            try:
+                map_nbt = nbtlib.File.parse(
+                    io.BytesIO(payload),
+                    byteorder="little",
+                )
+
+                if "scale" in map_nbt:
+                    map_nbt["scale"] = nbtlib.Byte(4)
+
+                else:
+                    raise VDBError(
+                        f"Map record {key!r} has no scale field"
+                    )
+
+                buffer = io.BytesIO()
+                map_nbt.write(
+                    buffer,
+                    byteorder="little",
+                )
+                payload = buffer.getvalue()
+
+            except Exception as exc:
+                raise VDBTransferError(
+                    f"Could not update map scale for {key!r}: {exc}"
+                ) from exc
+
         leveldb_db.put(
             key.encode("utf-8"),
-            vdb.get(key),
+            payload,
         )
 
         stats.copied += 1
